@@ -25,7 +25,7 @@ if you see missing feature todo add it
 ---
 
 ## ⌨️ CLI
-- [ ] multiple server profiles stored in `~/.tunnel-ssh.json` with host/port/token
+- [x] multiple server profiles stored in `~/.tunnel-ssh.json` with host/port/token
 - [ ] support command with sudo
 - [x] **Batch mode** — `tunnel exec <server> --script commands.txt` to run multiple commands from a file
 - [x] **Pipe support** — `cat local.sql | tunnel exec prod -` (read stdin and send as command input)
@@ -47,7 +47,7 @@ if you see missing feature todo add it
 - [x] **Connection status indicator** — Green/red dot showing whether the server is reachable
 - [ ] **Auto-reconnect** — Automatically retry the WebSocket connection if it drops
 - [x] **Keyboard shortcuts** — `Ctrl+L` clear terminal, `Ctrl+R` refresh files, `Ctrl+Enter` run command
-- [ ] **Load profile from config** — Dropdown selector to pick from `~/.tunnel-ssh.json` profiles
+- [x] **Load profile from config** — Dropdown selector to pick from `~/.tunnel-ssh.json` profiles
 
 ---
 

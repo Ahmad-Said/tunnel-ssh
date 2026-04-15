@@ -15,7 +15,7 @@ import flet as ft
 import httpx
 import websockets
 
-from tunnel_ssh.shared.config import DEFAULT_PORT
+from tunnel_ssh.shared.config import DEFAULT_PORT, load_config
 from tunnel_ssh.shared.http import auth_headers, base_url, ws_url
 from tunnel_ssh.shared.models import CommandOutput, CommandPayload, DirectoryListing
 from tunnel_ssh.ui.helpers import human_size, human_time, is_root_path, join_path, parent_path
@@ -46,6 +46,56 @@ async def app_main(page: ft.Page) -> None:
         keyboard_type=ft.KeyboardType.NUMBER,
     )
     token_field = ft.TextField(label="Token", width=200, dense=True, password=True, can_reveal_password=True)
+
+    # ── Profile dropdown (loaded from ~/.tunnel-ssh.json) ─────────────
+    _MANUAL_ENTRY = "__manual__"
+
+    def _build_profile_options() -> list[ft.dropdown.Option]:
+        """Build dropdown options from saved profiles."""
+        options: list[ft.dropdown.Option] = [
+            ft.dropdown.Option(key=_MANUAL_ENTRY, text="Manual entry"),
+        ]
+        cfg = load_config()
+        for name, profile in cfg.servers.items():
+            auth = " 🔒" if profile.token else ""
+            label = f"{name}  ({profile.host}:{profile.port}{auth})"
+            options.append(ft.dropdown.Option(key=name, text=label))
+        return options
+
+    profile_dropdown = ft.Dropdown(
+        label="Profile",
+        width=280,
+        dense=True,
+        options=_build_profile_options(),
+        value=_MANUAL_ENTRY,
+    )
+
+    def _on_profile_change(e: object) -> None:
+        """Fill connection fields from the selected profile."""
+        selected = profile_dropdown.value
+        if selected == _MANUAL_ENTRY or selected is None:
+            return
+        cfg = load_config()
+        profile = cfg.servers.get(selected)
+        if profile is None:
+            return
+        server_field.value = profile.host
+        port_field.value = str(profile.port)
+        token_field.value = profile.token or ""
+        page.update()
+
+    profile_dropdown.on_change = _on_profile_change
+
+    def _refresh_profiles() -> None:
+        """Reload profile dropdown options from disk."""
+        profile_dropdown.options = _build_profile_options()
+        page.update()
+
+    refresh_profiles_btn = ft.IconButton(
+        icon=ft.Icons.SYNC, tooltip="Reload profiles",
+        icon_size=18,
+        on_click=lambda e: _refresh_profiles(),
+    )
 
     def _get_conn() -> tuple[str, int, str | None]:
         server = server_field.value or "localhost"
@@ -441,7 +491,7 @@ async def app_main(page: ft.Page) -> None:
 
     file_panel = ft.Container(
         content=ft.Column([
-            ft.Row([server_field, port_field, token_field, connect_btn, refresh_btn],
+            ft.Row([profile_dropdown, refresh_profiles_btn, server_field, port_field, token_field, connect_btn, refresh_btn],
                    alignment=ft.MainAxisAlignment.START, wrap=True),
             breadcrumb_row,
             ft.Divider(height=1),
