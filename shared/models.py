@@ -16,6 +16,7 @@ class FileItem(BaseModel):
     is_dir: bool
     size: int | None = None
     modified: float | None = None  # epoch seconds
+    permissions: str | None = None  # e.g. "rwxr-xr-x"
 
 
 class DirectoryListing(BaseModel):

@@ -7,9 +7,9 @@
 | Component | Tech | Purpose |
 |-----------|------|---------|
 | **server** | FastAPI + uvicorn | REST file manager + WebSocket command execution |
-| **cli** | Typer + websockets | `tunnel <server> <cmd>` from your terminal |
+| **cli** | Typer + websockets + httpx | `tunnel exec/ls/get/put` from your terminal |
 | **ui** | Flet (Flutter) | Desktop GUI – file explorer + streaming terminal |
-| **shared** | Pydantic | Data models shared by all components |
+| **shared** | Pydantic | Data models + config shared by all components |
 
 ---
 
@@ -24,38 +24,63 @@ pip install -e .
 ### 1. Start the server (on the remote machine)
 
 ```bash
-tunnel-server
-# Listening on 0.0.0.0:222
+tunnel-server                                 # default: 0.0.0.0:222, no auth
+tunnel-server --port 2222                     # custom port
+tunnel-server --token s3cret                  # enable bearer-token auth
+tunnel-server --host 127.0.0.1 --port 2222   # bind to localhost only
 ```
 
-> **Note:** Port 222 may require elevated privileges on Linux/macOS. Override with:
-> ```bash
-> TUNNEL_SSH_PORT=2222 tunnel-server
-> ```
+> **Note:** Port 222 may require elevated privileges on Linux/macOS.  
+> You can also set `TUNNEL_SSH_PORT` and `TUNNEL_SSH_TOKEN` env vars.
 
 ### 2. Use the CLI
 
 ```bash
-# List files
-tunnel myserver ls /home
+# Execute remote commands (streaming output)
+tunnel exec myserver ls -la /home
+tunnel exec myserver tail -f /var/log/syslog
+tunnel exec myserver --cwd /var/log cat access.log
 
-# Stream output in real-time
-tunnel myserver tail -f /var/log/syslog
+# List remote directory
+tunnel ls myserver /var/log
+tunnel ls myserver /etc -l              # long format: permissions, size, date
 
-# Specify a custom port
-tunnel myserver --port 2222 cat /etc/hostname
+# Download a remote file
+tunnel get myserver /etc/hostname
+tunnel get myserver /var/log/app.log ./local-copy.log
 
-# Set remote working directory
-tunnel myserver --cwd /var/log ls -la
+# Upload a local file
+tunnel put myserver ./backup.tar.gz /tmp
+
+# Override port or token per-command
+tunnel exec myserver --port 2222 --token s3cret whoami
 ```
 
-### 3. Launch the Desktop UI
+### 3. Named Server Profiles
+
+Save server configs in `~/.tunnel-ssh.json` so you never have to type host/port/token again:
+
+```bash
+tunnel config add prod --host 10.0.0.5 --port 2222 --token s3cret
+tunnel config add staging --host 10.0.0.10
+tunnel config list
+tunnel config remove staging
+
+# Now use the profile name instead of host:
+tunnel exec prod uname -a
+tunnel ls prod /home
+tunnel get prod /etc/hostname
+```
+
+### 4. Launch the Desktop UI
 
 ```bash
 tunnel-ui
 ```
 
-Enter the server address and port, click **Connect** to browse files, type commands in the terminal pane and see output streamed live.
+- Enter server address, port, and optional auth token
+- **File Explorer (left panel):** Browse directories, click folders to navigate, click files to download
+- **Terminal (right panel):** Run commands with real-time streamed output, use ↑/↓ for command history
 
 ---
 
@@ -67,13 +92,14 @@ tunnel-ssh/
 ├── README.md
 ├── shared/
 │   ├── __init__.py
+│   ├── config.py           # Centralized config: port, token, server profiles
 │   └── models.py           # Pydantic: FileItem, DirectoryListing, CommandPayload, CommandOutput
 ├── server/
 │   ├── __init__.py
-│   └── main.py             # FastAPI app (GET /files, GET /file, POST /file, WS /ws/execute)
+│   └── main.py             # FastAPI app (GET /health, /files, /file, POST /file, WS /ws/execute)
 ├── cli/
 │   ├── __init__.py
-│   └── main.py             # Typer CLI (tunnel <server> <command>)
+│   └── main.py             # Typer CLI (tunnel exec/ls/get/put/config)
 └── ui/
     ├── __init__.py
     └── main.py             # Flet desktop app (file explorer + terminal)
@@ -81,16 +107,37 @@ tunnel-ssh/
 
 ## API Reference
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/files?path=` | GET | List directory contents |
-| `/file?path=` | GET | Download a file |
-| `/file?path=` | POST | Upload a file (multipart) |
-| `/ws/execute` | WebSocket | Send `CommandPayload` JSON, receive streamed `CommandOutput` JSON frames |
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/health` | GET | No | Liveness probe |
+| `/files?path=` | GET | Bearer | List directory contents (returns `DirectoryListing`) |
+| `/file?path=` | GET | Bearer | Download a file |
+| `/file?path=` | POST | Bearer | Upload a file (multipart form) |
+| `/ws/execute?token=` | WebSocket | Query param | Send `CommandPayload` JSON, receive streamed `CommandOutput` JSON |
+
+> When no `--token` / `TUNNEL_SSH_TOKEN` is set on the server, auth is disabled entirely.
+
+## Authentication
+
+| Transport | How token is sent |
+|-----------|-------------------|
+| HTTP REST | `Authorization: Bearer <token>` header |
+| WebSocket | `?token=<token>` query parameter |
+
+## Configuration
+
+| Env var | Default | Description |
+|---------|---------|-------------|
+| `TUNNEL_SSH_PORT` | `222` | Default server port |
+| `TUNNEL_SSH_TOKEN` | *(none)* | Bearer token (disables auth if unset) |
+| `TUNNEL_SSH_CONFIG` | `~/.tunnel-ssh.json` | Path to server profiles config |
 
 ## Security Notice
 
-⚠️ This tool has **no authentication**. It is designed for trusted networks / development use only. For production, consider adding token-based auth or mTLS.
+⚠️ This tool executes arbitrary shell commands remotely. Use it only on **trusted networks**.
+- Always set a **token** in production: `tunnel-server --token <secret>`
+- Consider binding to `127.0.0.1` and using an SSH tunnel or VPN for the transport layer
+- No TLS by default — put behind a reverse proxy with HTTPS for public-facing deployments
 
 ## License
 
