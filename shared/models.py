@@ -1,0 +1,48 @@
+"""Pydantic models shared across server, CLI, and UI."""
+
+from __future__ import annotations
+
+from typing import Literal
+
+from pydantic import BaseModel, Field
+
+
+# ── File Management ──────────────────────────────────────────────────────────
+
+class FileItem(BaseModel):
+    """A single entry (file or directory) returned by the file-listing endpoint."""
+
+    name: str
+    is_dir: bool
+    size: int | None = None
+    modified: float | None = None  # epoch seconds
+
+
+class DirectoryListing(BaseModel):
+    """Response for GET /files – the contents of a directory."""
+
+    path: str
+    items: list[FileItem] = Field(default_factory=list)
+
+
+# ── Command Execution ────────────────────────────────────────────────────────
+
+class CommandPayload(BaseModel):
+    """WebSocket message *sent by the client* to request command execution."""
+
+    command: str
+    cwd: str | None = None
+
+
+class CommandOutput(BaseModel):
+    """WebSocket message *sent by the server* with execution output.
+
+    ``stream`` is one of:
+    * ``"stdout"`` – a chunk of standard output
+    * ``"stderr"`` – a chunk of standard error
+    * ``"exit"``   – the process has exited; ``data`` contains the return code
+    """
+
+    stream: Literal["stdout", "stderr", "exit"]
+    data: str
+
