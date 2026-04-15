@@ -2,22 +2,57 @@
 
 Accepts shell commands over a persistent WebSocket connection, runs them via
 ``asyncio.create_subprocess_shell``, and streams stdout/stderr back in real time.
+
+Sudo support
+~~~~~~~~~~~~
+When a command contains ``sudo``, the server automatically injects the ``-S``
+flag so that sudo reads the password from stdin.  If a password prompt is
+detected on stderr the server either auto-supplies a cached password (from a
+previous successful sudo in the same session) or sends a ``"prompt"`` message
+to the client and waits for a ``StdinInput`` reply.
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
+import re
 
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect, status
 
 from tunnel_ssh.server.settings import settings
-from tunnel_ssh.shared.models import CommandOutput, CommandPayload
+from tunnel_ssh.shared.models import CommandOutput, CommandPayload, StdinInput
 
 logger = logging.getLogger("tunnel-ssh.server.ws")
 
 router = APIRouter(tags=["execute"])
 
+# ── Sudo helpers ─────────────────────────────────────────────────────────────
+
+_SUDO_RE = re.compile(r"\bsudo\b")
+_SUDO_PROMPT_RE = re.compile(
+    r"(?:password|contraseña|mot de passe|passwort|密码)[^:]*:\s*$",
+    re.IGNORECASE,
+)
+
+
+def _is_sudo_command(command: str) -> bool:
+    """Return *True* if *command* invokes ``sudo``."""
+    return bool(_SUDO_RE.search(command))
+
+
+def _inject_sudo_s(command: str) -> str:
+    """Ensure every ``sudo`` in *command* carries the ``-S`` flag.
+
+    ``-S`` makes sudo read the password from stdin instead of ``/dev/tty``,
+    which is required when there is no controlling terminal.
+    """
+    if "-S" in command:
+        return command
+    return _SUDO_RE.sub("sudo -S", command)
+
+
+# ── WebSocket endpoint ───────────────────────────────────────────────────────
 
 @router.websocket("/ws/execute")
 async def ws_execute(ws: WebSocket, token: str | None = Query(default=None)) -> None:
@@ -32,17 +67,27 @@ async def ws_execute(ws: WebSocket, token: str | None = Query(default=None)) -> 
     await ws.accept()
     proc: asyncio.subprocess.Process | None = None
 
+    # Cached sudo password — persists across commands within the same WS session.
+    cached_sudo_pw: str | None = None
+
     try:
         while True:
             raw = await ws.receive_text()
             payload = CommandPayload.model_validate_json(raw)
             logger.info("Execute: %s (cwd=%s)", payload.command, payload.cwd)
 
+            command = payload.command
+            sudo = _is_sudo_command(command)
+            if sudo:
+                command = _inject_sudo_s(command)
+                logger.debug("Sudo detected — rewritten command: %s", command)
+
             try:
                 proc = await asyncio.create_subprocess_shell(
-                    payload.command,
+                    command,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
+                    stdin=asyncio.subprocess.PIPE if sudo else None,
                     cwd=payload.cwd,
                     executable=settings.shell_path,
                 )
@@ -55,20 +100,71 @@ async def ws_execute(ws: WebSocket, token: str | None = Query(default=None)) -> 
                 )
                 continue
 
-            async def _stream(pipe: asyncio.StreamReader | None, name: str) -> None:
-                if pipe is None:
+            # ── Stream helpers ────────────────────────────────────────────
+
+            # Track whether the cached password was already attempted for
+            # *this* command so we don't loop forever on a stale password.
+            cached_tried = False
+
+            async def _stream_stdout() -> None:
+                if proc.stdout is None:
                     return
                 while True:
-                    line = await pipe.readline()
-                    if not line:
+                    chunk = await proc.stdout.read(4096)
+                    if not chunk:
                         break
-                    msg = CommandOutput(stream=name, data=line.decode(errors="replace"))  # type: ignore[arg-type]
-                    await ws.send_text(msg.model_dump_json())
+                    await ws.send_text(
+                        CommandOutput(stream="stdout", data=chunk.decode(errors="replace")).model_dump_json()
+                    )
 
-            await asyncio.gather(
-                _stream(proc.stdout, "stdout"),
-                _stream(proc.stderr, "stderr"),
-            )
+            async def _stream_stderr() -> None:
+                nonlocal cached_sudo_pw, cached_tried
+                if proc.stderr is None:
+                    return
+                while True:
+                    chunk = await proc.stderr.read(4096)
+                    if not chunk:
+                        break
+                    text = chunk.decode(errors="replace")
+
+                    # ── Sudo password prompt detection ────────────────────
+                    if sudo and _SUDO_PROMPT_RE.search(text):
+                        if cached_sudo_pw and not cached_tried:
+                            # Auto-supply the cached password silently.
+                            logger.debug("Auto-supplying cached sudo password")
+                            cached_tried = True
+                            if proc.stdin:
+                                proc.stdin.write((cached_sudo_pw + "\n").encode())
+                                await proc.stdin.drain()
+                            continue  # don't forward prompt to client
+
+                        # Ask the client for a password.
+                        logger.debug("Requesting sudo password from client")
+                        await ws.send_text(
+                            CommandOutput(stream="prompt", data=text).model_dump_json()
+                        )
+                        pw_raw = await ws.receive_text()
+                        pw_msg = StdinInput.model_validate_json(pw_raw)
+                        if proc.stdin:
+                            proc.stdin.write((pw_msg.stdin + "\n").encode())
+                            await proc.stdin.drain()
+                        cached_sudo_pw = pw_msg.stdin
+                        cached_tried = True
+                        continue
+
+                    # Normal stderr output
+                    await ws.send_text(
+                        CommandOutput(stream="stderr", data=text).model_dump_json()
+                    )
+
+            await asyncio.gather(_stream_stdout(), _stream_stderr())
+
+            # Close stdin so the process doesn't hang waiting for input.
+            if proc.stdin:
+                try:
+                    proc.stdin.close()
+                except Exception:
+                    pass
 
             exit_code = await proc.wait()
             proc = None

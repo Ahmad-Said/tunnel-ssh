@@ -17,7 +17,7 @@ import websockets
 
 from tunnel_ssh.shared.config import DEFAULT_PORT, load_config
 from tunnel_ssh.shared.http import auth_headers, base_url, ws_url
-from tunnel_ssh.shared.models import CommandOutput, CommandPayload, DirectoryListing
+from tunnel_ssh.shared.models import CommandOutput, CommandPayload, DirectoryListing, StdinInput
 from tunnel_ssh.ui.helpers import human_size, human_time, is_root_path, join_path, parent_path
 
 logger = logging.getLogger("tunnel-ssh.ui")
@@ -386,6 +386,50 @@ async def app_main(page: ft.Page) -> None:
         if confirmed and new_name and new_name != old_name:
             await _rename_remote(remote_path, new_name)
 
+    async def _sudo_password_dialog(prompt_text: str) -> str | None:
+        """Show a modal dialog asking for a sudo password. Returns the password or *None* if cancelled."""
+        pw_field = ft.TextField(
+            value="", password=True, can_reveal_password=True,
+            autofocus=True, width=300, label="Password",
+        )
+        result: list[str] = []
+
+        def on_ok(e: object) -> None:
+            result.append(pw_field.value or "")
+            dlg.open = False
+            page.update()
+
+        def on_cancel(e: object) -> None:
+            dlg.open = False
+            page.update()
+
+        def on_submit(e: object) -> None:
+            on_ok(e)
+
+        pw_field.on_submit = on_submit
+
+        dlg = ft.AlertDialog(
+            modal=True,
+            title=ft.Text("sudo — password required"),
+            content=ft.Column(
+                [ft.Text(prompt_text.strip(), font_family="Consolas", size=13), pw_field],
+                tight=True, spacing=12,
+            ),
+            actions=[
+                ft.TextButton("Cancel", on_click=on_cancel),
+                ft.TextButton("OK", on_click=on_ok),
+            ],
+        )
+        page.overlay.append(dlg)
+        dlg.open = True
+        page.update()
+
+        while dlg.open:
+            await asyncio.sleep(0.1)
+
+        page.overlay.remove(dlg)
+        return result[0] if result else None
+
     # ── Buttons ──────────────────────────────────────────────────────────
 
     connect_btn = ft.ElevatedButton(
@@ -468,6 +512,19 @@ async def app_main(page: ft.Page) -> None:
                             ft.Text(f"[exit {msg.data}]", color=color, font_family="Consolas", size=12, italic=True)
                         )
                         break
+                    elif msg.stream == "prompt":
+                        # Server requests interactive input (sudo password).
+                        terminal_output.controls.append(
+                            ft.Text(msg.data.strip(), color=ft.Colors.AMBER, font_family="Consolas", size=13)
+                        )
+                        page.update()
+                        password = await _sudo_password_dialog(msg.data)
+                        if password is not None:
+                            await ws_conn.send(StdinInput(stdin=password).model_dump_json())
+                        else:
+                            # User cancelled — we can't abort the remote process
+                            # cleanly, so send empty string to let sudo fail.
+                            await ws_conn.send(StdinInput(stdin="").model_dump_json())
                     else:
                         color = ft.Colors.WHITE if msg.stream == "stdout" else ft.Colors.RED_300
                         terminal_output.controls.append(

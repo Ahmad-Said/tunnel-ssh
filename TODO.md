@@ -26,7 +26,7 @@ if you see missing feature todo add it
 
 ## ⌨️ CLI
 - [x] multiple server profiles stored in `~/.tunnel-ssh.json` with host/port/token
-- [ ] support command with sudo
+- [x] support command with sudo
 - [x] **Batch mode** — `tunnel exec <server> --script commands.txt` to run multiple commands from a file
 - [x] **Pipe support** — `cat local.sql | tunnel exec prod -` (read stdin and send as command input)
 

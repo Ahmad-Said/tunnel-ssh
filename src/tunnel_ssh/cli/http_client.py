@@ -6,6 +6,7 @@ stay focused on argument parsing and output formatting.
 
 from __future__ import annotations
 
+import getpass
 import logging
 import sys
 
@@ -14,7 +15,7 @@ import typer
 import websockets
 
 from tunnel_ssh.shared.http import ws_url
-from tunnel_ssh.shared.models import CommandOutput, CommandPayload
+from tunnel_ssh.shared.models import CommandOutput, CommandPayload, StdinInput
 
 logger = logging.getLogger("tunnel-ssh.cli")
 
@@ -67,6 +68,10 @@ async def execute_remote(
                 elif msg.stream == "stderr":
                     sys.stderr.write(msg.data)
                     sys.stderr.flush()
+                elif msg.stream == "prompt":
+                    # Server is requesting interactive input (e.g. sudo password).
+                    password = getpass.getpass(msg.data)
+                    await ws.send(StdinInput(stdin=password).model_dump_json())
                 elif msg.stream == "exit":
                     return int(msg.data)
     except websockets.exceptions.ConnectionClosedError:

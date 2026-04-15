@@ -52,11 +52,22 @@ class CommandOutput(BaseModel):
 
     ``stream`` is one of:
 
-    * ``"stdout"`` — a chunk of standard output
-    * ``"stderr"`` — a chunk of standard error
-    * ``"exit"``   — the process has exited; ``data`` contains the return code
+    * ``"stdout"``  — a chunk of standard output
+    * ``"stderr"``  — a chunk of standard error
+    * ``"exit"``    — the process has exited; ``data`` contains the return code
+    * ``"prompt"``  — the process requires interactive input (e.g. sudo password)
     """
 
-    stream: Literal["stdout", "stderr", "exit"]
+    stream: Literal["stdout", "stderr", "exit", "prompt"]
     data: str
+
+
+class StdinInput(BaseModel):
+    """WebSocket message *sent by the client* to write data to a running process's stdin.
+
+    Typically used to supply a sudo password after the server sends a ``prompt`` message.
+    """
+
+    stdin: str
+
 
