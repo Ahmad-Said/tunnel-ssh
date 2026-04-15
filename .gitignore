@@ -29,3 +29,12 @@ Desktop.ini
 # Environment variables
 .env
 .env.*
+
+# Testing / Coverage / Tooling
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+*.log
+

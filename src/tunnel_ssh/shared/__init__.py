@@ -1,4 +1,7 @@
-from shared.config import (
+"""Shared configuration, models, and utilities used by server, CLI, and UI."""
+
+from tunnel_ssh.shared.config import (
+    CONFIG_PATH,
     DEFAULT_PORT,
     DEFAULT_TOKEN,
     ServerProfile,
@@ -7,22 +10,27 @@ from shared.config import (
     resolve_server,
     save_config,
 )
-from shared.models import (
+from tunnel_ssh.shared.http import auth_headers
+from tunnel_ssh.shared.models import (
     CommandOutput,
     CommandPayload,
     DirectoryListing,
     FileItem,
+    FilePreview,
 )
 
 __all__ = [
+    "CONFIG_PATH",
     "DEFAULT_PORT",
     "DEFAULT_TOKEN",
-    "FileItem",
-    "DirectoryListing",
-    "CommandPayload",
     "CommandOutput",
+    "CommandPayload",
+    "DirectoryListing",
+    "FileItem",
+    "FilePreview",
     "ServerProfile",
     "TunnelConfig",
+    "auth_headers",
     "load_config",
     "resolve_server",
     "save_config",

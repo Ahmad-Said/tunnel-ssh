@@ -1,21 +1,28 @@
-"""Centralized configuration for tunnel-ssh components."""
+"""Centralized configuration for tunnel-ssh components.
+
+Reads defaults from environment variables and manages the on-disk server
+profiles stored in ``~/.tunnel-ssh.json`` (or ``$TUNNEL_SSH_CONFIG``).
+"""
 
 from __future__ import annotations
 
 import json
+import logging
 import os
 from pathlib import Path
 
 from pydantic import BaseModel
 
+logger = logging.getLogger("tunnel-ssh.config")
+
 # ── Defaults ─────────────────────────────────────────────────────────────────
 
-DEFAULT_PORT = int(os.getenv("TUNNEL_SSH_PORT", "222"))
+DEFAULT_PORT: int = int(os.getenv("TUNNEL_SSH_PORT", "222"))
 DEFAULT_TOKEN: str | None = os.getenv("TUNNEL_SSH_TOKEN") or None
-CONFIG_PATH = Path(os.getenv("TUNNEL_SSH_CONFIG", Path.home() / ".tunnel-ssh.json"))
+CONFIG_PATH: Path = Path(os.getenv("TUNNEL_SSH_CONFIG", Path.home() / ".tunnel-ssh.json"))
 
 
-# ── Server profile (used by CLI & UI) ───────────────────────────────────────
+# ── Data models ──────────────────────────────────────────────────────────────
 
 class ServerProfile(BaseModel):
     """A named remote server entry stored in ``~/.tunnel-ssh.json``."""
@@ -31,6 +38,8 @@ class TunnelConfig(BaseModel):
     servers: dict[str, ServerProfile] = {}
 
 
+# ── Persistence ──────────────────────────────────────────────────────────────
+
 def load_config() -> TunnelConfig:
     """Load ``~/.tunnel-ssh.json`` (or ``$TUNNEL_SSH_CONFIG``).
 
@@ -42,7 +51,14 @@ def load_config() -> TunnelConfig:
         data = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
         return TunnelConfig.model_validate(data)
     except Exception:
+        logger.warning("Failed to parse config at %s — using defaults", CONFIG_PATH)
         return TunnelConfig()
+
+
+def save_config(cfg: TunnelConfig) -> None:
+    """Persist the config to disk."""
+    CONFIG_PATH.write_text(cfg.model_dump_json(indent=2), encoding="utf-8")
+    logger.debug("Config saved to %s", CONFIG_PATH)
 
 
 def resolve_server(name_or_host: str) -> ServerProfile:
@@ -53,11 +69,7 @@ def resolve_server(name_or_host: str) -> ServerProfile:
     """
     cfg = load_config()
     if name_or_host in cfg.servers:
+        logger.debug("Resolved profile '%s'", name_or_host)
         return cfg.servers[name_or_host]
     return ServerProfile(host=name_or_host)
-
-
-def save_config(cfg: TunnelConfig) -> None:
-    """Persist the config to disk."""
-    CONFIG_PATH.write_text(cfg.model_dump_json(indent=2), encoding="utf-8")
 

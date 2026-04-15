@@ -1,11 +1,14 @@
-"""Pydantic models shared across server, CLI, and UI."""
+"""Pydantic models shared across server, CLI, and UI.
+
+Every data structure that crosses the HTTP / WebSocket boundary is defined here
+so that server, CLI, and UI always agree on the schema.
+"""
 
 from __future__ import annotations
 
 from typing import Literal
 
 from pydantic import BaseModel, Field
-
 
 # ── File Management ──────────────────────────────────────────────────────────
 
@@ -20,14 +23,14 @@ class FileItem(BaseModel):
 
 
 class DirectoryListing(BaseModel):
-    """Response for GET /files – the contents of a directory."""
+    """Response for ``GET /files`` — the contents of a directory."""
 
     path: str
     items: list[FileItem] = Field(default_factory=list)
 
 
 class FilePreview(BaseModel):
-    """Response for GET /file/preview – text content of a file."""
+    """Response for ``GET /file/preview`` — text content of a file."""
 
     path: str
     content: str
@@ -48,9 +51,10 @@ class CommandOutput(BaseModel):
     """WebSocket message *sent by the server* with execution output.
 
     ``stream`` is one of:
-    * ``"stdout"`` – a chunk of standard output
-    * ``"stderr"`` – a chunk of standard error
-    * ``"exit"``   – the process has exited; ``data`` contains the return code
+
+    * ``"stdout"`` — a chunk of standard output
+    * ``"stderr"`` — a chunk of standard error
+    * ``"exit"``   — the process has exited; ``data`` contains the return code
     """
 
     stream: Literal["stdout", "stderr", "exit"]

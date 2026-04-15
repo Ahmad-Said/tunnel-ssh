@@ -108,21 +108,40 @@ tunnel-ui
 
 ```
 tunnel-ssh/
-├── pyproject.toml          # Build config & dependencies
+├── pyproject.toml              # Build config, dependencies, ruff/mypy/pytest settings
 ├── README.md
-├── shared/
-│   ├── __init__.py
-│   ├── config.py           # Centralized config: port, token, server profiles
-│   └── models.py           # Pydantic: FileItem, DirectoryListing, CommandPayload, CommandOutput
-├── server/
-│   ├── __init__.py
-│   └── main.py             # FastAPI app (GET /health, /files, /file, POST /file, WS /ws/execute)
-├── cli/
-│   ├── __init__.py
-│   └── main.py             # Typer CLI (tunnel exec/ls/get/put/config)
-└── ui/
-    ├── __init__.py
-    └── main.py             # Flet desktop app (file explorer + terminal)
+├── TODO.md
+├── tests/                      # pytest test suite
+│   ├── test_shared.py
+│   └── test_server_helpers.py
+└── src/tunnel_ssh/             # All source code under a proper namespace
+    ├── __init__.py             # Package root (__version__)
+    ├── _version.py             # Single source of truth for version
+    ├── py.typed                # PEP 561 type-checking marker
+    ├── shared/                 # Models + config shared by all components
+    │   ├── config.py           # Server profiles, defaults, load/save
+    │   ├── models.py           # Pydantic: FileItem, DirectoryListing, CommandPayload, CommandOutput
+    │   └── http.py             # Shared HTTP helpers (auth_headers, base_url, ws_url)
+    ├── server/                 # FastAPI app (runs on the remote machine)
+    │   ├── app.py              # create_app() factory
+    │   ├── settings.py         # ServerSettings singleton (token, shell)
+    │   ├── auth.py             # Bearer-token dependency
+    │   ├── helpers.py          # format_permissions, etc.
+    │   ├── routes/
+    │   │   ├── health.py       # GET /health
+    │   │   ├── files.py        # GET/POST/DELETE/PATCH /file, GET /files
+    │   │   └── websocket.py    # WS /ws/execute
+    │   └── __main__.py         # Typer CLI entrypoint (tunnel-server)
+    ├── cli/                    # Typer CLI (runs on your local machine)
+    │   ├── app.py              # Top-level Typer app + run()
+    │   ├── http_client.py      # HTTP/WS client helpers
+    │   └── commands/
+    │       ├── exec_cmd.py     # tunnel exec
+    │       ├── files.py        # tunnel ls/get/put/rm/mv/cat
+    │       └── config.py       # tunnel config add/list/remove
+    └── ui/                     # Flet desktop app (runs on your local machine)
+        ├── app.py              # Main Flet app + layout
+        └── helpers.py          # Pure utility functions (human_size, path utils)
 ```
 
 ## API Reference
@@ -157,7 +176,7 @@ tunnel-ssh/
 
 ## Data Models
 
-All models live in `shared/models.py` and are shared across server, CLI, and UI.
+All models live in `src/tunnel_ssh/shared/models.py` and are shared across server, CLI, and UI.
 
 | Model | Used by | Description |
 |-------|---------|-------------|
@@ -186,8 +205,8 @@ python -m venv .venv
 # Linux / macOS
 source .venv/bin/activate
 
-# Install in editable mode
-pip install -e .
+# Install in editable mode (with dev tools)
+pip install -e ".[dev]"
 ```
 
 ### Running locally
@@ -203,14 +222,24 @@ tunnel exec localhost --token dev123 whoami
 tunnel-ui
 ```
 
+### Quality tools
+
+```bash
+ruff check src/ tests/        # lint
+ruff format src/ tests/       # auto-format
+python -m pytest tests/ -v    # test suite
+mypy src/                     # type checking
+```
+
 ### Project layout at a glance
 
 | Directory | Purpose |
 |-----------|---------|
-| `shared/` | Pydantic models & config — imported by all other packages |
-| `server/` | FastAPI app (runs on the remote machine) |
-| `cli/`    | Typer CLI (runs on your local machine) |
-| `ui/`     | Flet desktop app (runs on your local machine) |
+| `src/tunnel_ssh/shared/` | Pydantic models, config & HTTP helpers — imported by all other packages |
+| `src/tunnel_ssh/server/` | FastAPI app (runs on the remote machine) |
+| `src/tunnel_ssh/cli/`    | Typer CLI (runs on your local machine) |
+| `src/tunnel_ssh/ui/`     | Flet desktop app (runs on your local machine) |
+| `tests/`                 | pytest test suite |
 
 ## Roadmap
 

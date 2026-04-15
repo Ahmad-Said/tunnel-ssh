@@ -2,12 +2,25 @@
 requires = ["setuptools>=68.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
+# ── Project metadata ─────────────────────────────────────────────────────────
+
 [project]
 name = "tunnel-ssh"
-version = "0.2.0"
+version = "0.3.0"
 description = "Remote execution and file management over HTTP/WebSocket when SSH port 22 is blocked"
 readme = "README.md"
 requires-python = ">=3.12"
+license = {text = "MIT"}
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Framework :: FastAPI",
+    "Topic :: System :: Systems Administration",
+    "License :: OSI Approved :: MIT License",
+]
+
 dependencies = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",
@@ -20,11 +33,70 @@ dependencies = [
     "aiofiles>=24",
 ]
 
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+    "httpx",
+    "ruff>=0.8",
+    "mypy>=1.11",
+]
+
+# ── Console scripts ──────────────────────────────────────────────────────────
+
 [project.scripts]
-tunnel-server = "server.main:_cli"
-tunnel        = "cli.main:run"
-tunnel-ui     = "ui.main:main"
+tunnel-server = "tunnel_ssh.server.__main__:run"
+tunnel        = "tunnel_ssh.cli.app:run"
+tunnel-ui     = "tunnel_ssh.ui.app:main"
+
+# ── Setuptools — src layout ──────────────────────────────────────────────────
 
 [tool.setuptools.packages.find]
-include = ["shared*", "server*", "cli*", "ui*"]
+where = ["src"]
 
+[tool.setuptools.package-data]
+tunnel_ssh = ["py.typed"]
+
+# ── Ruff (linter + formatter) ────────────────────────────────────────────────
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+src = ["src"]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "UP",   # pyupgrade
+    "B",    # flake8-bugbear
+    "SIM",  # flake8-simplify
+    "RUF",  # ruff-specific rules
+]
+ignore = [
+    "E501",   # line length handled by formatter
+    "B008",   # do not perform function calls in argument defaults (needed for Depends/Query)
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["tunnel_ssh"]
+
+# ── Mypy ─────────────────────────────────────────────────────────────────────
+
+[tool.mypy]
+python_version = "3.12"
+strict = false
+warn_return_any = true
+warn_unused_configs = true
+
+[[tool.mypy.overrides]]
+module = ["flet", "flet.*", "websockets", "websockets.*", "aiofiles"]
+ignore_missing_imports = true
+
+# ── Pytest ───────────────────────────────────────────────────────────────────
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
