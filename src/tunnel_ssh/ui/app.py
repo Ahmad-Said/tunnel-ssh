@@ -117,7 +117,7 @@ async def app_main(page: ft.Page) -> None:
         breadcrumb_row.controls.append(ft.Container(width=6))
 
         sep = "\\" if "\\" in path else "/"
-        _btn_style = ft.ButtonStyle(padding=ft.padding.symmetric(horizontal=4))
+        _btn_style = ft.ButtonStyle(padding=ft.Padding.symmetric(horizontal=4))
 
         if sep == "\\":
             parts = path.split("\\")
@@ -228,19 +228,19 @@ async def app_main(page: ft.Page) -> None:
 
         # Context menu
         menu_items = [
-            ft.PopupMenuItem(text="Copy Path", icon=ft.Icons.COPY,
+            ft.PopupMenuItem(content=ft.Text("Copy Path"), icon=ft.Icons.COPY,
                              on_click=lambda e, p=full_path: _copy_path(p)),
         ]
         if not item.is_dir:
             menu_items.insert(0, ft.PopupMenuItem(
-                text="Download", icon=ft.Icons.DOWNLOAD,
+                content=ft.Text("Download"), icon=ft.Icons.DOWNLOAD,
                 on_click=lambda e, p=full_path: asyncio.ensure_future(_download_file(p)),
             ))
         menu_items.extend([
             ft.PopupMenuItem(),  # divider
-            ft.PopupMenuItem(text="Rename", icon=ft.Icons.EDIT,
+            ft.PopupMenuItem(content=ft.Text("Rename"), icon=ft.Icons.EDIT,
                              on_click=lambda e, p=full_path, n=item.name: asyncio.ensure_future(_rename_dialog(p, n))),
-            ft.PopupMenuItem(text="Delete", icon=ft.Icons.DELETE,
+            ft.PopupMenuItem(content=ft.Text("Delete"), icon=ft.Icons.DELETE,
                              on_click=lambda e, p=full_path, n=item.name: asyncio.ensure_future(_delete_confirm(p, n))),
         ])
 
@@ -432,7 +432,7 @@ async def app_main(page: ft.Page) -> None:
 
     # ── Buttons ──────────────────────────────────────────────────────────
 
-    connect_btn = ft.ElevatedButton(
+    connect_btn = ft.Button(
         "Connect", icon=ft.Icons.POWER,
         on_click=lambda e: asyncio.ensure_future(fetch_files("/")),
     )
@@ -556,7 +556,7 @@ async def app_main(page: ft.Page) -> None:
             file_status,
         ], expand=True),
         expand=1, padding=10,
-        border=ft.border.all(1, ft.Colors.GREY_800), border_radius=8,
+        border=ft.Border.all(1, ft.Colors.GREY_800), border_radius=8,
     )
 
     terminal_panel = ft.Container(
@@ -567,7 +567,7 @@ async def app_main(page: ft.Page) -> None:
                          bgcolor=ft.Colors.BLACK, border_radius=6, padding=8),
         ], expand=True),
         expand=1, padding=10,
-        border=ft.border.all(1, ft.Colors.GREY_800), border_radius=8,
+        border=ft.Border.all(1, ft.Colors.GREY_800), border_radius=8,
     )
 
     page.add(ft.Row([file_panel, terminal_panel], expand=True, spacing=10))
@@ -577,7 +577,7 @@ async def app_main(page: ft.Page) -> None:
 
 def main() -> None:
     """Setuptools / direct entrypoint."""
-    ft.app(target=app_main)
+    ft.run(app_main)
 
 
 if __name__ == "__main__":
