@@ -1,0 +1,19 @@
+services:
+  tunnel-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: tunnel-ssh-server
+    ports:
+      - "9222:222"
+    environment:
+      - TUNNEL_SSH_TOKEN=test-secret-token
+      - TUNNEL_SSH_SHELL=/bin/bash
+    command: ["tunnel-server", "--host", "0.0.0.0", "--port", "222", "--token", "test-secret-token"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:222/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+

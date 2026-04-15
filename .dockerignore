@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+*.egg-info/
+.git/
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+*.iml
+.idea/
+.vscode/
+.e2e_*
+
+
