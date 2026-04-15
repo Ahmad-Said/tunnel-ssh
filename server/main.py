@@ -5,6 +5,7 @@ Endpoints
 GET    /health                       Health check.
 GET    /files?path=<dir>             List directory contents.
 GET    /file?path=<filepath>         Download a single file.
+GET    /file/preview?path=<fp>       Preview text file contents (first N lines).
 POST   /file                         Upload a file  (multipart: ``path`` + ``file``).
 DELETE /file?path=<filepath>         Delete a file or directory.
 PATCH  /file?path=<fp>&new_name=<n>  Rename a file or directory.
@@ -46,7 +47,7 @@ from fastapi.responses import FileResponse
 from starlette.middleware.cors import CORSMiddleware
 
 from shared.config import DEFAULT_PORT, DEFAULT_TOKEN
-from shared.models import CommandOutput, CommandPayload, DirectoryListing, FileItem
+from shared.models import CommandOutput, CommandPayload, DirectoryListing, FileItem, FilePreview
 
 # ── Logging ──────────────────────────────────────────────────────────────────
 
@@ -164,6 +165,51 @@ async def download_file(path: Annotated[str, Query()]):
 
     logger.info("Download: %s", target)
     return FileResponse(path=str(target), filename=target.name)
+
+
+@app.get("/file/preview", response_model=FilePreview, dependencies=[Depends(_verify_token)])
+async def preview_file(
+    path: Annotated[str, Query()],
+    max_size: Annotated[int, Query()] = 512_000,  # 500 KB default limit
+):
+    """Return the text content of a file (up to *max_size* bytes).
+
+    Useful for previewing text files without downloading the whole thing.
+    Returns 400 if the file appears to be binary.
+    """
+    target = Path(path).resolve()
+    if not target.exists():
+        raise HTTPException(status_code=404, detail=f"File not found: {target}")
+    if not target.is_file():
+        raise HTTPException(status_code=400, detail=f"Not a regular file: {target}")
+    try:
+        file_size = target.stat().st_size
+    except PermissionError:
+        raise HTTPException(status_code=403, detail=f"Permission denied: {target}")
+
+    truncated = file_size > max_size
+    read_size = min(file_size, max_size)
+
+    try:
+        async with aiofiles.open(target, "rb") as f:
+            raw = await f.read(read_size)
+    except PermissionError:
+        raise HTTPException(status_code=403, detail=f"Permission denied: {target}")
+
+    # Detect binary content (presence of null bytes in the first chunk)
+    if b"\x00" in raw[:8192]:
+        raise HTTPException(status_code=400, detail="File appears to be binary")
+
+    try:
+        content = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        try:
+            content = raw.decode("latin-1")
+        except UnicodeDecodeError:
+            raise HTTPException(status_code=400, detail="Unable to decode file as text")
+
+    logger.info("Preview: %s (%d bytes, truncated=%s)", target, file_size, truncated)
+    return FilePreview(path=str(target), content=content, size=file_size, truncated=truncated)
 
 
 @app.post("/file", dependencies=[Depends(_verify_token)])

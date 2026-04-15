@@ -28,10 +28,12 @@ tunnel-server                                 # default: 0.0.0.0:222, no auth
 tunnel-server --port 2222                     # custom port
 tunnel-server --token s3cret                  # enable bearer-token auth
 tunnel-server --host 127.0.0.1 --port 2222   # bind to localhost only
+tunnel-server --shell /bin/sh                 # use a different shell (default: /bin/bash)
+tunnel-server --log-level debug               # verbose logging
 ```
 
 > **Note:** Port 222 may require elevated privileges on Linux/macOS.  
-> You can also set `TUNNEL_SSH_PORT` and `TUNNEL_SSH_TOKEN` env vars.
+> You can also set `TUNNEL_SSH_PORT`, `TUNNEL_SSH_TOKEN`, and `TUNNEL_SSH_SHELL` env vars.
 
 ### 2. Use the CLI
 
@@ -40,6 +42,13 @@ tunnel-server --host 127.0.0.1 --port 2222   # bind to localhost only
 tunnel exec myserver ls -la /home
 tunnel exec myserver tail -f /var/log/syslog
 tunnel exec myserver --cwd /var/log cat access.log
+
+# Batch mode — run multiple commands from a file
+tunnel exec myserver --script commands.txt
+
+# Pipe support — read commands from stdin
+echo "uname -a" | tunnel exec myserver -
+cat deploy-steps.sh | tunnel exec prod -
 
 # List remote directory
 tunnel ls myserver /var/log
@@ -78,9 +87,20 @@ tunnel get prod /etc/hostname
 tunnel-ui
 ```
 
-- Enter server address, port, and optional auth token
-- **File Explorer (left panel):** Browse directories, click folders to navigate, click files to download
-- **Terminal (right panel):** Run commands with real-time streamed output, use ↑/↓ for command history
+- Enter server address, port, and optional auth token, then click **Connect**
+- **File Explorer (left panel):**
+  - Browse directories — click folders to navigate, `..` to go up
+  - Breadcrumb navigation — click any path segment to jump directly
+  - Click a file to download it to your working directory
+  - Right-click (context menu) → **Download**, **Rename**, **Delete**, **Copy Path**
+  - Connection status indicator (green/red dot)
+- **Terminal (right panel):**
+  - Run commands with real-time streamed output
+  - Use `↑` / `↓` arrow keys to browse command history
+- **Keyboard shortcuts:**
+  - `Enter` — send command
+  - `Ctrl+L` — clear terminal
+  - `Ctrl+R` — refresh file list
 
 ---
 
@@ -112,7 +132,9 @@ tunnel-ssh/
 | `/health` | GET | No | Liveness probe |
 | `/files?path=` | GET | Bearer | List directory contents (returns `DirectoryListing`) |
 | `/file?path=` | GET | Bearer | Download a file |
-| `/file?path=` | POST | Bearer | Upload a file (multipart form) |
+| `/file?path=` | POST | Bearer | Upload a file (multipart: `path` query + `file` form) |
+| `/file?path=` | DELETE | Bearer | Delete a file or directory (recursive) |
+| `/file?path=&new_name=` | PATCH | Bearer | Rename a file or directory |
 | `/ws/execute?token=` | WebSocket | Query param | Send `CommandPayload` JSON, receive streamed `CommandOutput` JSON |
 
 > When no `--token` / `TUNNEL_SSH_TOKEN` is set on the server, auth is disabled entirely.
@@ -130,7 +152,19 @@ tunnel-ssh/
 |---------|---------|-------------|
 | `TUNNEL_SSH_PORT` | `222` | Default server port |
 | `TUNNEL_SSH_TOKEN` | *(none)* | Bearer token (disables auth if unset) |
+| `TUNNEL_SSH_SHELL` | `/bin/bash` | Shell executable used for command execution |
 | `TUNNEL_SSH_CONFIG` | `~/.tunnel-ssh.json` | Path to server profiles config |
+
+## Data Models
+
+All models live in `shared/models.py` and are shared across server, CLI, and UI.
+
+| Model | Used by | Description |
+|-------|---------|-------------|
+| `FileItem` | Server → Client | Single file/directory entry (name, size, modified, permissions) |
+| `DirectoryListing` | Server → Client | `GET /files` response — path + list of `FileItem` |
+| `CommandPayload` | Client → Server | WebSocket message: command string + optional cwd |
+| `CommandOutput` | Server → Client | WebSocket message: stream (`stdout`/`stderr`/`exit`) + data |
 
 ## Security Notice
 
@@ -138,6 +172,55 @@ tunnel-ssh/
 - Always set a **token** in production: `tunnel-server --token <secret>`
 - Consider binding to `127.0.0.1` and using an SSH tunnel or VPN for the transport layer
 - No TLS by default — put behind a reverse proxy with HTTPS for public-facing deployments
+
+## Development
+
+```bash
+# Clone the repository
+git clone <repo-url> && cd tunnel-ssh
+
+# Create a virtual environment (Python 3.12+)
+python -m venv .venv
+# Windows
+.venv\Scripts\activate
+# Linux / macOS
+source .venv/bin/activate
+
+# Install in editable mode
+pip install -e .
+```
+
+### Running locally
+
+```bash
+# Terminal 1 — start the server
+tunnel-server --token dev123
+
+# Terminal 2 — use the CLI
+tunnel exec localhost --token dev123 whoami
+
+# Or launch the GUI
+tunnel-ui
+```
+
+### Project layout at a glance
+
+| Directory | Purpose |
+|-----------|---------|
+| `shared/` | Pydantic models & config — imported by all other packages |
+| `server/` | FastAPI app (runs on the remote machine) |
+| `cli/`    | Typer CLI (runs on your local machine) |
+| `ui/`     | Flet desktop app (runs on your local machine) |
+
+## Roadmap
+
+See [`TODO.md`](TODO.md) for the full feature backlog. Highlights:
+
+- **Server:** Session management (persistent shell sessions), Docker image for Rocky Linux
+- **CLI:** Sudo support, multiple profiles from `~/.tunnel-ssh.json`
+- **UI:** Drag-and-drop upload, text file preview pane, multi-server tabs, theme switcher, auto-reconnect
+- **Packaging:** Standalone executables via PyInstaller / Nuitka, `pip install tunnel-ssh`
+- **Testing:** `pytest` unit & integration test suite
 
 ## License
 

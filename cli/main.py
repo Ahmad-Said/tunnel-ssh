@@ -66,11 +66,12 @@ def exec(
     token: Annotated[Optional[str], typer.Option("--token", "-t", help="Override auth token.")] = None,
     timeout: Annotated[float, typer.Option("--timeout", help="Connection timeout in seconds.")] = 10.0,
     script: Annotated[Optional[str], typer.Option("--script", "-S", help="Path to a file with commands to execute (one per line).")] = None,
+    sudo: Annotated[bool, typer.Option("--sudo", help="Prepend 'sudo' to each command.")] = False,
 ):
     """Execute COMMAND on SERVER and stream the output to this terminal.
 
-    Supports --script to run multiple commands from a file, and stdin pipe
-    (pass '-' as the command or pipe into tunnel exec).
+    Supports --script to run multiple commands from a file, stdin pipe
+    (pass '-' as the command or pipe into tunnel exec), and --sudo.
     """
     profile = resolve_server(server)
     host = profile.host
@@ -115,6 +116,10 @@ def exec(
         raise typer.Exit(code=1)
 
     # ── Execute ──────────────────────────────────────────────────────────
+    # Apply sudo prefix if requested
+    if sudo:
+        commands_to_run = [f"sudo {cmd}" for cmd in commands_to_run]
+
     worst_exit = 0
     try:
         for cmd in commands_to_run:
@@ -293,6 +298,101 @@ def put(
     except httpx.ConnectError as exc:
         typer.echo(f"Connection failed: {exc}", err=True)
         raise typer.Exit(code=1)
+
+
+# ── config add ───────────────────────────────────────────────────────────────
+
+@app.command(name="rm")
+def rm(
+    server: Annotated[str, typer.Argument(help="Server name or hostname/IP.")],
+    remote_path: Annotated[str, typer.Argument(help="Remote file or directory to delete.")],
+    port: Annotated[Optional[int], typer.Option("--port", "-p")] = None,
+    token: Annotated[Optional[str], typer.Option("--token", "-t")] = None,
+    force: Annotated[bool, typer.Option("--force", "-f", help="Skip confirmation prompt.")] = False,
+):
+    """Delete a file or directory on the remote server."""
+    profile = resolve_server(server)
+    host = profile.host
+    p = port if port is not None else profile.port
+    tok = token or profile.token
+
+    if not force:
+        confirm = typer.confirm(f"Delete '{remote_path}' on {host}:{p}?")
+        if not confirm:
+            raise typer.Abort()
+
+    url = f"http://{host}:{p}/file"
+    try:
+        resp = httpx.delete(url, params={"path": remote_path}, headers=_auth_headers(tok), timeout=10)
+        resp.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        typer.echo(f"Error {exc.response.status_code}: {exc.response.text}", err=True)
+        raise typer.Exit(code=1)
+    except httpx.ConnectError as exc:
+        typer.echo(f"Connection failed: {exc}", err=True)
+        raise typer.Exit(code=1)
+
+    typer.echo(f"Deleted: {remote_path}")
+
+
+@app.command(name="mv")
+def mv(
+    server: Annotated[str, typer.Argument(help="Server name or hostname/IP.")],
+    remote_path: Annotated[str, typer.Argument(help="Remote file or directory to rename.")],
+    new_name: Annotated[str, typer.Argument(help="New name (filename only, not a path).")],
+    port: Annotated[Optional[int], typer.Option("--port", "-p")] = None,
+    token: Annotated[Optional[str], typer.Option("--token", "-t")] = None,
+):
+    """Rename a file or directory on the remote server."""
+    profile = resolve_server(server)
+    host = profile.host
+    p = port if port is not None else profile.port
+    tok = token or profile.token
+
+    url = f"http://{host}:{p}/file"
+    try:
+        resp = httpx.patch(url, params={"path": remote_path, "new_name": new_name}, headers=_auth_headers(tok), timeout=10)
+        resp.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        typer.echo(f"Error {exc.response.status_code}: {exc.response.text}", err=True)
+        raise typer.Exit(code=1)
+    except httpx.ConnectError as exc:
+        typer.echo(f"Connection failed: {exc}", err=True)
+        raise typer.Exit(code=1)
+
+    data = resp.json()
+    typer.echo(f"Renamed: {data.get('old_path')} → {data.get('new_path')}")
+
+
+@app.command(name="cat")
+def cat(
+    server: Annotated[str, typer.Argument(help="Server name or hostname/IP.")],
+    remote_path: Annotated[str, typer.Argument(help="Remote file to preview.")],
+    port: Annotated[Optional[int], typer.Option("--port", "-p")] = None,
+    token: Annotated[Optional[str], typer.Option("--token", "-t")] = None,
+    max_size: Annotated[int, typer.Option("--max-size", help="Max bytes to read.")] = 512_000,
+):
+    """Preview the text content of a remote file."""
+    profile = resolve_server(server)
+    host = profile.host
+    p = port if port is not None else profile.port
+    tok = token or profile.token
+
+    url = f"http://{host}:{p}/file/preview"
+    try:
+        resp = httpx.get(url, params={"path": remote_path, "max_size": max_size}, headers=_auth_headers(tok), timeout=15)
+        resp.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        typer.echo(f"Error {exc.response.status_code}: {exc.response.text}", err=True)
+        raise typer.Exit(code=1)
+    except httpx.ConnectError as exc:
+        typer.echo(f"Connection failed: {exc}", err=True)
+        raise typer.Exit(code=1)
+
+    data = resp.json()
+    sys.stdout.write(data["content"])
+    if data.get("truncated"):
+        typer.echo(f"\n… [truncated at {max_size:,} bytes, total {data['size']:,} bytes]", err=True)
 
 
 # ── config add ───────────────────────────────────────────────────────────────

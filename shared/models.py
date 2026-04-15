@@ -26,6 +26,15 @@ class DirectoryListing(BaseModel):
     items: list[FileItem] = Field(default_factory=list)
 
 
+class FilePreview(BaseModel):
+    """Response for GET /file/preview – text content of a file."""
+
+    path: str
+    content: str
+    size: int
+    truncated: bool = False
+
+
 # ── Command Execution ────────────────────────────────────────────────────────
 
 class CommandPayload(BaseModel):
