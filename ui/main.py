@@ -92,9 +92,67 @@ async def app_main(page: ft.Page):
         return {}
 
     # ── File explorer widgets ────────────────────────────────────────────
-    path_text = ft.Text(value="/", size=14, weight=ft.FontWeight.BOLD, selectable=True)
+    breadcrumb_row = ft.Row(wrap=True, spacing=0)
+    status_icon = ft.Icon(ft.Icons.CIRCLE, color=ft.Colors.GREY_500, size=14, tooltip="Not connected")
     file_list = ft.ListView(expand=True, spacing=2, auto_scroll=False)
     file_status = ft.Text(value="", size=12, italic=True, color=ft.Colors.GREY_400)
+
+    def _build_breadcrumbs(path: str):
+        """Rebuild the breadcrumb row from path segments."""
+        breadcrumb_row.controls.clear()
+        breadcrumb_row.controls.append(status_icon)
+        breadcrumb_row.controls.append(ft.Container(width=6))
+
+        # Determine separator
+        sep = "\\" if "\\" in path else "/"
+
+        # Split the path into meaningful segments
+        if sep == "\\":
+            # Windows: C:\foo\bar → ["C:", "foo", "bar"]
+            parts = path.split("\\")
+            cumulative = parts[0]  # "C:"
+            breadcrumb_row.controls.append(
+                ft.TextButton(
+                    cumulative + "\\",
+                    style=ft.ButtonStyle(padding=ft.padding.symmetric(horizontal=4)),
+                    on_click=lambda e, p=cumulative + "\\": asyncio.ensure_future(fetch_files(p)),
+                )
+            )
+            for part in parts[1:]:
+                if not part:
+                    continue
+                cumulative += "\\" + part
+                breadcrumb_row.controls.append(ft.Text("›", size=14, color=ft.Colors.GREY_500))
+                breadcrumb_row.controls.append(
+                    ft.TextButton(
+                        part,
+                        style=ft.ButtonStyle(padding=ft.padding.symmetric(horizontal=4)),
+                        on_click=lambda e, p=cumulative: asyncio.ensure_future(fetch_files(p)),
+                    )
+                )
+        else:
+            # POSIX: /home/user/dir → ["", "home", "user", "dir"]
+            parts = path.split("/")
+            breadcrumb_row.controls.append(
+                ft.TextButton(
+                    "/",
+                    style=ft.ButtonStyle(padding=ft.padding.symmetric(horizontal=4)),
+                    on_click=lambda e: asyncio.ensure_future(fetch_files("/")),
+                )
+            )
+            cumulative = ""
+            for part in parts[1:]:
+                if not part:
+                    continue
+                cumulative += "/" + part
+                breadcrumb_row.controls.append(ft.Text("›", size=14, color=ft.Colors.GREY_500))
+                breadcrumb_row.controls.append(
+                    ft.TextButton(
+                        part,
+                        style=ft.ButtonStyle(padding=ft.padding.symmetric(horizontal=4)),
+                        on_click=lambda e, p=cumulative: asyncio.ensure_future(fetch_files(p)),
+                    )
+                )
 
     async def fetch_files(path: str = "/"):
         server, port, token = _get_conn()
@@ -113,8 +171,12 @@ async def app_main(page: ft.Page):
 
             listing = DirectoryListing.model_validate(resp.json())
             current_path[0] = listing.path
-            path_text.value = listing.path
+            _build_breadcrumbs(listing.path)
             file_status.value = f"{len(listing.items)} items"
+
+            # Connection succeeded
+            status_icon.color = ft.Colors.GREEN_400
+            status_icon.tooltip = "Connected"
 
             # Back button (if not root)
             is_root = listing.path in ("/", "\\") or (len(listing.path) <= 3 and listing.path.endswith(":\\"))
@@ -149,17 +211,48 @@ async def app_main(page: ft.Page):
                 else:
                     on_click = lambda e, p=full_path: asyncio.ensure_future(_download_file(p))
 
+                # Context menu (trailing popup)
+                menu_items = [
+                    ft.PopupMenuItem(
+                        text="Copy Path",
+                        icon=ft.Icons.COPY,
+                        on_click=lambda e, p=full_path: _copy_path(p),
+                    ),
+                ]
+                if not item.is_dir:
+                    menu_items.insert(0, ft.PopupMenuItem(
+                        text="Download",
+                        icon=ft.Icons.DOWNLOAD,
+                        on_click=lambda e, p=full_path: asyncio.ensure_future(_download_file(p)),
+                    ))
+                menu_items.extend([
+                    ft.PopupMenuItem(),  # divider
+                    ft.PopupMenuItem(
+                        text="Rename",
+                        icon=ft.Icons.EDIT,
+                        on_click=lambda e, p=full_path, n=item.name: asyncio.ensure_future(_rename_dialog(p, n)),
+                    ),
+                    ft.PopupMenuItem(
+                        text="Delete",
+                        icon=ft.Icons.DELETE,
+                        on_click=lambda e, p=full_path, n=item.name: asyncio.ensure_future(_delete_confirm(p, n)),
+                    ),
+                ])
+
                 tile = ft.ListTile(
                     leading=ft.Icon(icon, color=color),
                     title=ft.Text(item.name),
                     subtitle=ft.Text(" · ".join(subtitle_parts)) if subtitle_parts else None,
                     on_click=on_click,
+                    trailing=ft.PopupMenuButton(items=menu_items),
                     dense=True,
                 )
                 file_list.controls.append(tile)
 
         except Exception as exc:
             file_status.value = f"Error: {exc}"
+            status_icon.color = ft.Colors.RED_400
+            status_icon.tooltip = f"Connection failed: {exc}"
 
         page.update()
 
@@ -189,6 +282,120 @@ async def app_main(page: ft.Page):
 
         page.update()
 
+    def _copy_path(remote_path: str):
+        """Copy a remote path to the clipboard."""
+        page.set_clipboard(remote_path)
+        file_status.value = f"Copied: {remote_path}"
+        page.update()
+
+    async def _delete_remote(remote_path: str):
+        """Call DELETE /file on the server, then refresh."""
+        server, port, token = _get_conn()
+        file_status.value = f"Deleting {remote_path}…"
+        page.update()
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                resp = await client.delete(
+                    f"{_base_url(server, port)}/file",
+                    params={"path": remote_path},
+                    headers=_auth_headers(token),
+                )
+                resp.raise_for_status()
+            file_status.value = f"Deleted: {remote_path}"
+        except Exception as exc:
+            file_status.value = f"Delete failed: {exc}"
+        page.update()
+        await fetch_files(current_path[0])
+
+    async def _rename_remote(remote_path: str, new_name: str):
+        """Call PATCH /file on the server, then refresh."""
+        server, port, token = _get_conn()
+        file_status.value = f"Renaming…"
+        page.update()
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                resp = await client.patch(
+                    f"{_base_url(server, port)}/file",
+                    params={"path": remote_path, "new_name": new_name},
+                    headers=_auth_headers(token),
+                )
+                resp.raise_for_status()
+            data = resp.json()
+            file_status.value = f"Renamed → {data.get('new_path', new_name)}"
+        except Exception as exc:
+            file_status.value = f"Rename failed: {exc}"
+        page.update()
+        await fetch_files(current_path[0])
+
+    async def _delete_confirm(remote_path: str, name: str):
+        """Show a confirmation dialog before deleting."""
+        result: list[bool] = []
+
+        def on_yes(e):
+            result.append(True)
+            dlg.open = False
+            page.update()
+
+        def on_no(e):
+            dlg.open = False
+            page.update()
+
+        dlg = ft.AlertDialog(
+            modal=True,
+            title=ft.Text("Confirm Delete"),
+            content=ft.Text(f"Delete '{name}'?\n\n{remote_path}"),
+            actions=[
+                ft.TextButton("Cancel", on_click=on_no),
+                ft.TextButton("Delete", on_click=on_yes, style=ft.ButtonStyle(color=ft.Colors.RED_400)),
+            ],
+        )
+        page.overlay.append(dlg)
+        dlg.open = True
+        page.update()
+
+        # Wait for the dialog to close
+        while dlg.open:
+            await asyncio.sleep(0.1)
+
+        page.overlay.remove(dlg)
+        if result:
+            await _delete_remote(remote_path)
+
+    async def _rename_dialog(remote_path: str, old_name: str):
+        """Show a rename dialog."""
+        name_field = ft.TextField(value=old_name, autofocus=True, width=300)
+        confirmed: list[bool] = []
+
+        def on_ok(e):
+            confirmed.append(True)
+            dlg.open = False
+            page.update()
+
+        def on_cancel(e):
+            dlg.open = False
+            page.update()
+
+        dlg = ft.AlertDialog(
+            modal=True,
+            title=ft.Text("Rename"),
+            content=name_field,
+            actions=[
+                ft.TextButton("Cancel", on_click=on_cancel),
+                ft.TextButton("Rename", on_click=on_ok),
+            ],
+        )
+        page.overlay.append(dlg)
+        dlg.open = True
+        page.update()
+
+        while dlg.open:
+            await asyncio.sleep(0.1)
+
+        page.overlay.remove(dlg)
+        new_name = (name_field.value or "").strip()
+        if confirmed and new_name and new_name != old_name:
+            await _rename_remote(remote_path, new_name)
+
     connect_btn = ft.ElevatedButton(
         "Connect",
         icon=ft.Icons.POWER,
@@ -212,7 +419,14 @@ async def app_main(page: ft.Page):
     )
 
     def _on_cmd_key(e: ft.KeyboardEvent):
-        """Navigate command history with Up/Down arrow keys."""
+        """Navigate command history with Up/Down, Ctrl+L clear, Ctrl+R refresh."""
+        if e.ctrl and e.key == "L":
+            terminal_output.controls.clear()
+            page.update()
+            return
+        if e.ctrl and e.key == "R":
+            asyncio.ensure_future(fetch_files(current_path[0]))
+            return
         if e.key == "Arrow Up" and command_history:
             idx = history_index[0]
             if idx < len(command_history) - 1:
@@ -300,7 +514,7 @@ async def app_main(page: ft.Page):
                     alignment=ft.MainAxisAlignment.START,
                     wrap=True,
                 ),
-                path_text,
+                breadcrumb_row,
                 ft.Divider(height=1),
                 file_list,
                 file_status,

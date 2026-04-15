@@ -2,11 +2,13 @@
 
 Endpoints
 ---------
-GET  /health                 Health check.
-GET  /files?path=<dir>       List directory contents.
-GET  /file?path=<filepath>   Download a single file.
-POST /file                   Upload a file  (multipart: ``path`` + ``file``).
-WS   /ws/execute             Execute a shell command and stream output.
+GET    /health                       Health check.
+GET    /files?path=<dir>             List directory contents.
+GET    /file?path=<filepath>         Download a single file.
+POST   /file                         Upload a file  (multipart: ``path`` + ``file``).
+DELETE /file?path=<filepath>         Delete a file or directory.
+PATCH  /file?path=<fp>&new_name=<n>  Rename a file or directory.
+WS     /ws/execute                   Execute a shell command and stream output.
 
 Authentication
 --------------
@@ -21,6 +23,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import shutil
 import stat as stat_mod
 from pathlib import Path
 from typing import Annotated
@@ -63,10 +66,18 @@ app.add_middleware(
 # Runtime token – set via env var or start() CLI arg.
 _auth_token: str | None = DEFAULT_TOKEN
 
+# Shell executable used for command execution.
+_shell_path: str = os.getenv("TUNNEL_SSH_SHELL", "/bin/bash")
+
 
 def set_auth_token(token: str | None) -> None:
     global _auth_token
     _auth_token = token or None
+
+
+def set_shell_path(shell: str) -> None:
+    global _shell_path
+    _shell_path = shell
 
 
 # ── Auth dependency ──────────────────────────────────────────────────────────
@@ -176,6 +187,54 @@ async def upload_file(path: Annotated[str, Query()], file: UploadFile):
     return {"status": "ok", "path": str(dest_file), "size": dest_file.stat().st_size}
 
 
+@app.delete("/file", dependencies=[Depends(_verify_token)])
+async def delete_file(path: Annotated[str, Query()]):
+    """Delete a file or directory on the remote machine."""
+    target = Path(path).resolve()
+    if not target.exists():
+        raise HTTPException(status_code=404, detail=f"Path not found: {target}")
+
+    try:
+        if target.is_dir():
+            shutil.rmtree(target)
+        else:
+            target.unlink()
+    except PermissionError:
+        raise HTTPException(status_code=403, detail=f"Permission denied: {target}")
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=f"Delete failed: {exc}")
+
+    logger.info("Deleted: %s", target)
+    return {"status": "ok", "path": str(target)}
+
+
+@app.patch("/file", dependencies=[Depends(_verify_token)])
+async def rename_file(
+    path: Annotated[str, Query()],
+    new_name: Annotated[str, Query()],
+):
+    """Rename a file or directory on the remote machine."""
+    target = Path(path).resolve()
+    if not target.exists():
+        raise HTTPException(status_code=404, detail=f"Path not found: {target}")
+    if "/" in new_name or "\\" in new_name:
+        raise HTTPException(status_code=400, detail="new_name must be a simple filename, not a path")
+
+    new_path = target.parent / new_name
+    if new_path.exists():
+        raise HTTPException(status_code=409, detail=f"Already exists: {new_path}")
+
+    try:
+        target.rename(new_path)
+    except PermissionError:
+        raise HTTPException(status_code=403, detail=f"Permission denied: {target}")
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=f"Rename failed: {exc}")
+
+    logger.info("Renamed: %s → %s", target, new_path)
+    return {"status": "ok", "old_path": str(target), "new_path": str(new_path)}
+
+
 # ── WebSocket command execution ──────────────────────────────────────────────
 
 @app.websocket("/ws/execute")
@@ -202,6 +261,7 @@ async def ws_execute(ws: WebSocket, token: str | None = Query(default=None)):
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
                     cwd=payload.cwd,
+                    executable=_shell_path,
                 )
             except (FileNotFoundError, PermissionError, OSError) as exc:
                 await ws.send_text(
@@ -256,6 +316,7 @@ def start(
     host: Annotated[str, _typer.Option("--host", "-H", help="Bind address.")] = "0.0.0.0",
     port: Annotated[int, _typer.Option("--port", "-p", help="Bind port.")] = DEFAULT_PORT,
     token: Annotated[str | None, _typer.Option("--token", "-t", help="Auth token (or set TUNNEL_SSH_TOKEN env).")] = DEFAULT_TOKEN,
+    shell: Annotated[str, _typer.Option("--shell", "-s", help="Shell executable for command execution.")] = "/bin/bash",
     log_level: Annotated[str, _typer.Option("--log-level", help="Logging level.")] = "info",
 ):
     """Start the tunnel-ssh API server."""
@@ -264,8 +325,10 @@ def start(
         os.environ["TUNNEL_SSH_TOKEN"] = token
 
     set_auth_token(token)
+    set_shell_path(shell)
 
     logging.basicConfig(level=getattr(logging, log_level.upper(), logging.INFO))
+    logger.info("Shell: %s", _shell_path)
     if _auth_token:
         logger.info("Auth enabled (token set)")
     else:

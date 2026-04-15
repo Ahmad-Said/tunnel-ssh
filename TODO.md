@@ -16,17 +16,19 @@ if you see missing feature todo add it
 
 ## 🖥️ Server
 - [ ] **Authentication** — Support bearer token auth via `Authorization saved in json config file for each server
-- [ ] Choose of which full path shell to use for command execution (default: `/bin/bash`, but could be `/bin/sh`, `/bin/zsh`, etc.)
+- [x] Choose of which full path shell to use for command execution (default: `/bin/bash`, but could be `/bin/sh`, `/bin/zsh`, etc.)
 - [ ] **Session management** — Persistent shell sessions that survive WebSocket reconnection (like `tmux`/`screen` on the server side)
+- [x] **Delete endpoint** — `DELETE /file?path=...` to delete files and directories
+- [x] **Rename endpoint** — `PATCH /file?path=...&new_name=...` to rename files and directories
 
 
 ---
 
 ## ⌨️ CLI
 - [ ] multiple server profiles stored in `~/.tunnel-ssh.json` with host/port/token
-- [ ] 
-- [ ] **Batch mode** — `tunnel exec <server> --script commands.txt` to run multiple commands from a file
-- [ ] **Pipe support** — `cat local.sql | tunnel exec prod psql -d mydb` (read stdin and send as command input)
+- [ ] support command with sudo
+- [x] **Batch mode** — `tunnel exec <server> --script commands.txt` to run multiple commands from a file
+- [x] **Pipe support** — `cat local.sql | tunnel exec prod -` (read stdin and send as command input)
 
 ---
 
@@ -34,17 +36,17 @@ if you see missing feature todo add it
 
 - [ ] **File upload via drag-and-drop** — Drag local files onto the file panel to upload them and ctrl+c ctrl +v to copy file or upload one
 - [ ] **Save-as dialog for downloads** — Use Flet's `FilePicker` to let the user choose where to save downloaded files
-- [ ] **File context menu** — Right-click → Download, Delete, Rename, Copy Path, copy file
+- [x] **File context menu** — Right-click → Download, Delete, Rename, Copy Path, copy file
 - [ ] **Text file preview pane** — Click a file to preview its contents in a third panel (syntax-highlighted)
 - [ ] **Multi-server tabs** — Connect to multiple servers simultaneously in separate tabs
-- [ ] **Breadcrumb navigation** — Clickable path segments instead of just a text label
+- [x] **Breadcrumb navigation** — Clickable path segments instead of just a text label
 - [ ] **Search / filter bar** — Filter the file list by name pattern
 - [ ] **Terminal tabs** — Multiple terminal sessions side-by-side or in tabs
 - [ ] **Persistent command history** — Save history to disk across sessions (like `~/.bash_history`)
 - [ ] **Theme switcher** — Light / dark / system theme toggle
-- [ ] **Connection status indicator** — Green/red dot showing whether the server is reachable
+- [x] **Connection status indicator** — Green/red dot showing whether the server is reachable
 - [ ] **Auto-reconnect** — Automatically retry the WebSocket connection if it drops
-- [ ] **Keyboard shortcuts** — `Ctrl+L` clear terminal, `Ctrl+R` refresh files, `Ctrl+Enter` run command
+- [x] **Keyboard shortcuts** — `Ctrl+L` clear terminal, `Ctrl+R` refresh files, `Ctrl+Enter` run command
 - [ ] **Load profile from config** — Dropdown selector to pick from `~/.tunnel-ssh.json` profiles
 
 ---

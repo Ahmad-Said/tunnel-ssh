@@ -4,6 +4,8 @@ Usage::
 
     tunnel exec myserver ls -la /home
     tunnel exec 192.168.1.50 cat /etc/hostname
+    tunnel exec prod --script commands.txt          # batch mode
+    echo "ls -la" | tunnel exec prod -              # stdin pipe
     tunnel ls   myserver /var/log
     tunnel get  myserver /etc/hostname ./hostname.local
     tunnel put  myserver ./backup.tar.gz /tmp
@@ -58,30 +60,74 @@ def _auth_headers(token: str | None) -> dict[str, str]:
 @app.command()
 def exec(
     server: Annotated[str, typer.Argument(help="Server name (from config) or hostname/IP.")],
-    command: Annotated[list[str], typer.Argument(help="The command (and arguments) to execute remotely.")],
+    command: Annotated[Optional[list[str]], typer.Argument(help="The command (and arguments) to execute remotely.")] = None,
     port: Annotated[Optional[int], typer.Option("--port", "-p", help="Override server port.")] = None,
     cwd: Annotated[Optional[str], typer.Option("--cwd", "-C", help="Working directory on the remote machine.")] = None,
     token: Annotated[Optional[str], typer.Option("--token", "-t", help="Override auth token.")] = None,
     timeout: Annotated[float, typer.Option("--timeout", help="Connection timeout in seconds.")] = 10.0,
+    script: Annotated[Optional[str], typer.Option("--script", "-S", help="Path to a file with commands to execute (one per line).")] = None,
 ):
-    """Execute COMMAND on SERVER and stream the output to this terminal."""
-    full_command = " ".join(command)
-    if not full_command.strip():
-        typer.echo("No command provided.", err=True)
-        raise typer.Exit(code=1)
+    """Execute COMMAND on SERVER and stream the output to this terminal.
 
+    Supports --script to run multiple commands from a file, and stdin pipe
+    (pass '-' as the command or pipe into tunnel exec).
+    """
     profile = resolve_server(server)
     host = profile.host
     p = port if port is not None else profile.port
     tok = token or profile.token
 
+    # ── Collect commands to run ───────────────────────────────────────────
+    commands_to_run: list[str] = []
+
+    if script:
+        # Batch mode: read commands from a file
+        script_path = Path(script)
+        if not script_path.is_file():
+            typer.echo(f"Script file not found: {script_path}", err=True)
+            raise typer.Exit(code=1)
+        for line in script_path.read_text(encoding="utf-8").splitlines():
+            stripped = line.strip()
+            if stripped and not stripped.startswith("#"):
+                commands_to_run.append(stripped)
+        if not commands_to_run:
+            typer.echo("Script file is empty or contains only comments.", err=True)
+            raise typer.Exit(code=1)
+    elif command and command != ["-"]:
+        # Normal single-command mode
+        full_command = " ".join(command)
+        if not full_command.strip():
+            typer.echo("No command provided.", err=True)
+            raise typer.Exit(code=1)
+        commands_to_run.append(full_command)
+    elif not sys.stdin.isatty() or (command == ["-"]):
+        # Pipe / stdin mode: read command(s) from stdin
+        stdin_text = sys.stdin.read().strip()
+        if not stdin_text:
+            typer.echo("No input received from stdin.", err=True)
+            raise typer.Exit(code=1)
+        for line in stdin_text.splitlines():
+            stripped = line.strip()
+            if stripped and not stripped.startswith("#"):
+                commands_to_run.append(stripped)
+    else:
+        typer.echo("No command provided. Pass a command, use --script, or pipe via stdin.", err=True)
+        raise typer.Exit(code=1)
+
+    # ── Execute ──────────────────────────────────────────────────────────
+    worst_exit = 0
     try:
-        exit_code = asyncio.run(_execute(host, p, full_command, cwd, tok, timeout))
+        for cmd in commands_to_run:
+            if len(commands_to_run) > 1:
+                typer.echo(f"▶ {cmd}", err=True)
+            exit_code = asyncio.run(_execute(host, p, cmd, cwd, tok, timeout))
+            if exit_code != 0:
+                worst_exit = exit_code
     except KeyboardInterrupt:
         typer.echo("\nInterrupted.", err=True)
-        exit_code = 130
+        worst_exit = 130
 
-    raise typer.Exit(code=exit_code)
+    raise typer.Exit(code=worst_exit)
 
 
 async def _execute(server: str, port: int, command: str, cwd: str | None, token: str | None, timeout: float) -> int:
