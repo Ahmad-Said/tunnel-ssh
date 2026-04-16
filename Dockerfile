@@ -1,27 +1,15 @@
-# ── Ubuntu-based container for tunnel-ssh server ─────────────────────────────
-FROM ubuntu:24.04
+# ── Slim Python-based container for tunnel-ssh server ────────────────────────
+FROM python:3.12-slim
 
-# Avoid interactive prompts during package installation
-ENV DEBIAN_FRONTEND=noninteractive
-
-# Install Python, pip, bash, and common utilities for testing
-RUN rm -rf /var/lib/apt/lists/* && \
-    apt-get clean && \
-    apt-get update && \
+# Install only the extra utilities we need (Python/pip/venv already included)
+RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-        python3 \
-        python3-pip \
-        python3-venv \
-        bash \
         curl \
         jq \
         tree \
         net-tools \
     && rm -rf /var/lib/apt/lists/*
 
-# Create a virtual environment so pip install works without --break-system-packages
-RUN python3 -m venv /opt/tunnel-ssh-venv
-ENV PATH="/opt/tunnel-ssh-venv/bin:$PATH"
 
 # Copy the project into the container
 WORKDIR /app

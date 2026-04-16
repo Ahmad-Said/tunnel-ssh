@@ -16,7 +16,7 @@
 export MSYS_NO_PATHCONV=1
 
 # ── Configuration ────────────────────────────────────────────────────────────
-HOST="localhost"
+HOST="127.0.0.1"
 PORT=9222
 TOKEN="test-secret-token"
 COMPOSE_FILE="docker-compose.yml"
@@ -55,9 +55,6 @@ assert_exit_code() {
         FAIL=$((FAIL + 1))
     fi
 }
-
-# Common tunnel flags
-T="--port $PORT --token $TOKEN"
 
 # ── Lifecycle ────────────────────────────────────────────────────────────────
 
@@ -98,6 +95,11 @@ if [ "$HEALTHY" -eq 0 ]; then
     exit 1
 fi
 
+# ── Step 2: Configure CLI context ───────────────────────────────────────────
+yellow "--- Setting up CLI context ---"
+tunnel config add e2e --host "$HOST" --port "$PORT" --token "$TOKEN"
+tunnel config use-context e2e
+
 # ══════════════════════════════════════════════════════════════════════════════
 #  TESTS
 # ══════════════════════════════════════════════════════════════════════════════
@@ -111,25 +113,25 @@ assert_contains "GET /health returns ok" "$HEALTH" '"status":"ok"'
 # ── Test: exec — simple echo ────────────────────────────────────────────────
 echo ""
 bold "--- Test: exec echo ---"
-OUTPUT=$(tunnel exec "$HOST" "echo hello-e2e" $T 2>&1 || true)
+OUTPUT=$(tunnel exec "echo hello-e2e" 2>&1 || true)
 assert_contains "exec echo" "$OUTPUT" "hello-e2e"
 
 # ── Test: exec — uname ──────────────────────────────────────────────────────
 echo ""
 bold "--- Test: exec uname ---"
-OUTPUT=$(tunnel exec "$HOST" "uname -s" $T 2>&1 || true)
+OUTPUT=$(tunnel exec "uname -s" 2>&1 || true)
 assert_contains "exec uname" "$OUTPUT" "Linux"
 
 # ── Test: exec — whoami ──────────────────────────────────────────────────────
 echo ""
 bold "--- Test: exec whoami ---"
-OUTPUT=$(tunnel exec "$HOST" whoami $T 2>&1 || true)
+OUTPUT=$(tunnel exec whoami 2>&1 || true)
 assert_contains "exec whoami" "$OUTPUT" "root"
 
 # ── Test: exec — chained commands ────────────────────────────────────────────
 echo ""
 bold "--- Test: exec chained commands ---"
-OUTPUT=$(tunnel exec "$HOST" "echo aaa && echo bbb && echo ccc" $T 2>&1 || true)
+OUTPUT=$(tunnel exec "echo aaa && echo bbb && echo ccc" 2>&1 || true)
 assert_contains "chained: aaa" "$OUTPUT" "aaa"
 assert_contains "chained: bbb" "$OUTPUT" "bbb"
 assert_contains "chained: ccc" "$OUTPUT" "ccc"
@@ -137,34 +139,34 @@ assert_contains "chained: ccc" "$OUTPUT" "ccc"
 # ── Test: exec — non-zero exit code ─────────────────────────────────────────
 echo ""
 bold "--- Test: exec non-zero exit code ---"
-tunnel exec "$HOST" "exit 42" $T > /dev/null 2>&1
+tunnel exec "exit 42" > /dev/null 2>&1
 EXIT_CODE=$?
 assert_exit_code "exit 42 propagated" "$EXIT_CODE" 42
 
 # ── Test: exec — working directory ───────────────────────────────────────────
 echo ""
 bold "--- Test: exec cwd option ---"
-OUTPUT=$(tunnel exec "$HOST" pwd $T --cwd /tmp 2>&1 || true)
+OUTPUT=$(tunnel exec pwd --cwd /tmp 2>&1 || true)
 assert_contains "cwd /tmp" "$OUTPUT" "/tmp"
 
 # ── Test: ls — root directory ────────────────────────────────────────────────
 echo ""
 bold "--- Test: ls root directory ---"
-OUTPUT=$(tunnel ls "$HOST" / $T 2>&1 || true)
+OUTPUT=$(tunnel ls / 2>&1 || true)
 assert_contains "ls / contains etc" "$OUTPUT" "etc/"
 assert_contains "ls / contains usr" "$OUTPUT" "usr/"
 
 # ── Test: ls — /app ──────────────────────────────────────────────────────────
 echo ""
 bold "--- Test: ls /app ---"
-OUTPUT=$(tunnel ls "$HOST" /app $T 2>&1 || true)
+OUTPUT=$(tunnel ls /app 2>&1 || true)
 assert_contains "ls /app has pyproject.toml" "$OUTPUT" "pyproject.toml"
 assert_contains "ls /app has src/" "$OUTPUT" "src/"
 
 # ── Test: cat — /etc/os-release ──────────────────────────────────────────────
 echo ""
 bold "--- Test: cat /etc/os-release ---"
-OUTPUT=$(tunnel cat "$HOST" /etc/os-release $T 2>&1 || true)
+OUTPUT=$(tunnel cat /etc/os-release 2>&1 || true)
 assert_contains "cat os-release has Ubuntu" "$OUTPUT" "Ubuntu"
 
 # ── Test: put + get — file round-trip ────────────────────────────────────────
@@ -174,11 +176,11 @@ bold "--- Test: put + get round-trip ---"
 echo "e2e-payload-$$" > .e2e_upload_test.txt
 EXPECTED=$(cat .e2e_upload_test.txt)
 
-tunnel put "$HOST" .e2e_upload_test.txt /tmp $T 2>&1 || true
+tunnel put .e2e_upload_test.txt /tmp 2>&1 || true
 REMOTE_FILE="/tmp/.e2e_upload_test.txt"
 
 mkdir -p .e2e_download
-tunnel get "$HOST" "$REMOTE_FILE" .e2e_download $T 2>&1 || true
+tunnel get "$REMOTE_FILE" .e2e_download 2>&1 || true
 DOWNLOADED=$(cat .e2e_download/.e2e_upload_test.txt 2>/dev/null || echo "FILE_NOT_FOUND")
 assert_contains "round-trip content matches" "$DOWNLOADED" "$EXPECTED"
 rm -rf .e2e_upload_test.txt .e2e_download
@@ -186,14 +188,14 @@ rm -rf .e2e_upload_test.txt .e2e_download
 # ── Test: rm — delete file ───────────────────────────────────────────────────
 echo ""
 bold "--- Test: rm delete file ---"
-tunnel exec "$HOST" "echo deleteme > /tmp/to_delete.txt" $T 2>&1 || true
-OUTPUT=$(tunnel rm "$HOST" /tmp/to_delete.txt $T --force 2>&1 || true)
+tunnel exec "echo deleteme > /tmp/to_delete.txt" 2>&1 || true
+OUTPUT=$(tunnel rm /tmp/to_delete.txt --force 2>&1 || true)
 assert_contains "rm reports deleted" "$OUTPUT" "Deleted"
 
 # ── Test: auth — wrong token rejected ────────────────────────────────────────
 echo ""
 bold "--- Test: auth rejection ---"
-OUTPUT=$(tunnel exec "$HOST" "echo nope" --port "$PORT" --token "wrong-token" 2>&1 || true)
+OUTPUT=$(tunnel exec "echo nope" --token "wrong-token" 2>&1 || true)
 assert_contains "wrong token rejected" "$OUTPUT" "Connection closed unexpectedly"
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -212,6 +214,4 @@ echo ""
 if [ "$FAIL" -gt 0 ]; then
     exit 1
 fi
-
-
 

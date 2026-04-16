@@ -2,14 +2,15 @@
 
 > Remote execution and file management over HTTP / WebSocket – for when SSH port 22 is blocked.
 
-`tunnel-ssh` exposes a lightweight FastAPI server on the remote machine (default port **222**) and gives you three ways to interact with it:
+`tunnel-ssh` exposes a lightweight FastAPI server on the remote machine (default port **222**) and gives you three ways
+to interact with it:
 
-| Component | Tech | Purpose |
-|-----------|------|---------|
-| **server** | FastAPI + uvicorn | REST file manager + WebSocket command execution |
-| **cli** | Typer + websockets + httpx | `tunnel exec/ls/get/put` from your terminal |
-| **ui** | Flet (Flutter) | Desktop GUI – file explorer + streaming terminal |
-| **shared** | Pydantic | Data models + config shared by all components |
+| Component  | Tech                       | Purpose                                          |
+|------------|----------------------------|--------------------------------------------------|
+| **server** | FastAPI + uvicorn          | REST file manager + WebSocket command execution  |
+| **cli**    | Typer + websockets + httpx | `tunnel exec/ls/get/put` from your terminal      |
+| **ui**     | Flet (Flutter)             | Desktop GUI – file explorer + streaming terminal |
+| **shared** | Pydantic                   | Data models + config shared by all components    |
 
 ---
 
@@ -51,7 +52,6 @@ pipx install .
 # Or pip with --user
 pip install --user .
 ```
-
 
 ### Development install (editable, inside a venv)
 
@@ -253,7 +253,8 @@ tunnel --install-completion fish
 
 </details>
 
-After setup, press **Tab** to get suggestions for commands (`exec`, `ls`, `config`, …), options (`--server`, `--port`, …), and sub-commands (`config add`, `config use-context`, …).
+After setup, press **Tab** to get suggestions for commands (`exec`, `ls`, `config`, …), options (`--server`,
+`--port`, …), and sub-commands (`config add`, `config use-context`, …).
 
 ### 5. Launch the Desktop UI
 
@@ -263,18 +264,18 @@ tunnel-ui
 
 - Enter server address, port, and optional auth token, then click **Connect**
 - **File Explorer (left panel):**
-  - Browse directories — click folders to navigate, `..` to go up
-  - Breadcrumb navigation — click any path segment to jump directly
-  - Click a file to download it to your working directory
-  - Right-click (context menu) → **Download**, **Rename**, **Delete**, **Copy Path**
-  - Connection status indicator (green/red dot)
+    - Browse directories — click folders to navigate, `..` to go up
+    - Breadcrumb navigation — click any path segment to jump directly
+    - Click a file to download it to your working directory
+    - Right-click (context menu) → **Download**, **Rename**, **Delete**, **Copy Path**
+    - Connection status indicator (green/red dot)
 - **Terminal (right panel):**
-  - Run commands with real-time streamed output
-  - Use `↑` / `↓` arrow keys to browse command history
+    - Run commands with real-time streamed output
+    - Use `↑` / `↓` arrow keys to browse command history
 - **Keyboard shortcuts:**
-  - `Enter` — send command
-  - `Ctrl+L` — clear terminal
-  - `Ctrl+R` — refresh file list
+    - `Enter` — send command
+    - `Ctrl+L` — clear terminal
+    - `Ctrl+R` — refresh file list
 
 ---
 
@@ -320,48 +321,49 @@ tunnel-ssh/
 
 ## API Reference
 
-| Endpoint | Method | Auth | Description |
-|----------|--------|------|-------------|
-| `/health` | GET | No | Liveness probe |
-| `/files?path=` | GET | Bearer | List directory contents (returns `DirectoryListing`) |
-| `/file?path=` | GET | Bearer | Download a file |
-| `/file?path=` | POST | Bearer | Upload a file (multipart: `path` query + `file` form) |
-| `/file?path=` | DELETE | Bearer | Delete a file or directory (recursive) |
-| `/file?path=&new_name=` | PATCH | Bearer | Rename a file or directory |
-| `/ws/execute?token=` | WebSocket | Query param | Send `CommandPayload` JSON, receive streamed `CommandOutput` JSON |
+| Endpoint                | Method    | Auth        | Description                                                       |
+|-------------------------|-----------|-------------|-------------------------------------------------------------------|
+| `/health`               | GET       | No          | Liveness probe                                                    |
+| `/files?path=`          | GET       | Bearer      | List directory contents (returns `DirectoryListing`)              |
+| `/file?path=`           | GET       | Bearer      | Download a file                                                   |
+| `/file?path=`           | POST      | Bearer      | Upload a file (multipart: `path` query + `file` form)             |
+| `/file?path=`           | DELETE    | Bearer      | Delete a file or directory (recursive)                            |
+| `/file?path=&new_name=` | PATCH     | Bearer      | Rename a file or directory                                        |
+| `/ws/execute?token=`    | WebSocket | Query param | Send `CommandPayload` JSON, receive streamed `CommandOutput` JSON |
 
 > When no `--token` / `TUNNEL_SSH_TOKEN` is set on the server, auth is disabled entirely.
 
 ## Authentication
 
-| Transport | How token is sent |
-|-----------|-------------------|
+| Transport | How token is sent                      |
+|-----------|----------------------------------------|
 | HTTP REST | `Authorization: Bearer <token>` header |
-| WebSocket | `?token=<token>` query parameter |
+| WebSocket | `?token=<token>` query parameter       |
 
 ## Configuration
 
-| Env var | Default | Description |
-|---------|---------|-------------|
-| `TUNNEL_SSH_PORT` | `222` | Default server port |
-| `TUNNEL_SSH_TOKEN` | *(none)* | Bearer token (disables auth if unset) |
-| `TUNNEL_SSH_SHELL` | `/bin/bash` | Shell executable used for command execution |
-| `TUNNEL_SSH_CONFIG` | `~/.tunnel-ssh.json` | Path to server profiles config |
+| Env var             | Default              | Description                                 |
+|---------------------|----------------------|---------------------------------------------|
+| `TUNNEL_SSH_PORT`   | `222`                | Default server port                         |
+| `TUNNEL_SSH_TOKEN`  | *(none)*             | Bearer token (disables auth if unset)       |
+| `TUNNEL_SSH_SHELL`  | `/bin/bash`          | Shell executable used for command execution |
+| `TUNNEL_SSH_CONFIG` | `~/.tunnel-ssh.json` | Path to server profiles config              |
 
 ## Data Models
 
 All models live in `src/tunnel_ssh/shared/models.py` and are shared across server, CLI, and UI.
 
-| Model | Used by | Description |
-|-------|---------|-------------|
-| `FileItem` | Server → Client | Single file/directory entry (name, size, modified, permissions) |
-| `DirectoryListing` | Server → Client | `GET /files` response — path + list of `FileItem` |
-| `CommandPayload` | Client → Server | WebSocket message: command string + optional cwd |
-| `CommandOutput` | Server → Client | WebSocket message: stream (`stdout`/`stderr`/`exit`) + data |
+| Model              | Used by         | Description                                                     |
+|--------------------|-----------------|-----------------------------------------------------------------|
+| `FileItem`         | Server → Client | Single file/directory entry (name, size, modified, permissions) |
+| `DirectoryListing` | Server → Client | `GET /files` response — path + list of `FileItem`               |
+| `CommandPayload`   | Client → Server | WebSocket message: command string + optional cwd                |
+| `CommandOutput`    | Server → Client | WebSocket message: stream (`stdout`/`stderr`/`exit`) + data     |
 
 ## Security Notice
 
 ⚠️ This tool executes arbitrary shell commands remotely. Use it only on **trusted networks**.
+
 - Always set a **token** in production: `tunnel-server --token <secret>`
 - Consider binding to `127.0.0.1` and using an SSH tunnel or VPN for the transport layer
 - No TLS by default — put behind a reverse proxy with HTTPS for public-facing deployments
@@ -407,13 +409,13 @@ mypy src/                     # type checking
 
 ### Project layout at a glance
 
-| Directory | Purpose |
-|-----------|---------|
+| Directory                | Purpose                                                                 |
+|--------------------------|-------------------------------------------------------------------------|
 | `src/tunnel_ssh/shared/` | Pydantic models, config & HTTP helpers — imported by all other packages |
-| `src/tunnel_ssh/server/` | FastAPI app (runs on the remote machine) |
-| `src/tunnel_ssh/cli/`    | Typer CLI (runs on your local machine) |
-| `src/tunnel_ssh/ui/`     | Flet desktop app (runs on your local machine) |
-| `tests/`                 | pytest test suite |
+| `src/tunnel_ssh/server/` | FastAPI app (runs on the remote machine)                                |
+| `src/tunnel_ssh/cli/`    | Typer CLI (runs on your local machine)                                  |
+| `src/tunnel_ssh/ui/`     | Flet desktop app (runs on your local machine)                           |
+| `tests/`                 | pytest test suite                                                       |
 
 ## Roadmap
 
