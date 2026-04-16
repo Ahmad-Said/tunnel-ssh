@@ -21,8 +21,8 @@ def register(app: typer.Typer) -> None:
 
     @app.command()
     def exec(
-        server: Annotated[str | None, typer.Argument(help="Server name (from config) or hostname/IP. Uses current context if omitted.")] = None,
         command: Annotated[list[str] | None, typer.Argument(help="The command (and arguments) to execute remotely.")] = None,
+        server: Annotated[str | None, typer.Option("--server", "-s", help="Server name (from config) or hostname/IP. Uses current context if omitted.")] = None,
         port: Annotated[int | None, typer.Option("--port", "-p", help="Override server port.")] = None,
         cwd: Annotated[str | None, typer.Option("--cwd", "-C", help="Working directory on the remote machine.")] = None,
         token: Annotated[str | None, typer.Option("--token", "-t", help="Override auth token.")] = None,

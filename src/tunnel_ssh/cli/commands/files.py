@@ -31,8 +31,8 @@ def register(app: typer.Typer) -> None:
 
     @app.command(name="ls")
     def ls(
-        server: Annotated[str | None, typer.Argument(help="Server name or hostname/IP. Uses current context if omitted.")] = None,
         path: Annotated[str, typer.Argument(help="Remote directory path.")] = "/",
+        server: Annotated[str | None, typer.Option("--server", "-s", help="Server name or hostname/IP. Uses current context if omitted.")] = None,
         port: Annotated[int | None, typer.Option("--port", "-p")] = None,
         token: Annotated[str | None, typer.Option("--token", "-t")] = None,
         long: Annotated[bool, typer.Option("--long", "-l", help="Long format with size and permissions.")] = False,
@@ -67,16 +67,13 @@ def register(app: typer.Typer) -> None:
 
     @app.command(name="get")
     def get(
-        server: Annotated[str | None, typer.Argument(help="Server name or hostname/IP. Uses current context if omitted.")] = None,
-        remote_path: Annotated[str | None, typer.Argument(help="Remote file path to download.")] = None,
+        remote_path: Annotated[str, typer.Argument(help="Remote file path to download.")],
         local_path: Annotated[str | None, typer.Argument(help="Local destination (default: current dir).")] = None,
+        server: Annotated[str | None, typer.Option("--server", "-s", help="Server name or hostname/IP. Uses current context if omitted.")] = None,
         port: Annotated[int | None, typer.Option("--port", "-p")] = None,
         token: Annotated[str | None, typer.Option("--token", "-t")] = None,
     ) -> None:
         """Download a file from the remote server."""
-        if remote_path is None:
-            typer.echo("Remote path is required.", err=True)
-            raise typer.Exit(code=1)
         profile = _resolve_or_exit(server)
         host, p, tok = profile.host, port or profile.port, token or profile.token
 
@@ -109,16 +106,13 @@ def register(app: typer.Typer) -> None:
 
     @app.command(name="put")
     def put(
-        server: Annotated[str | None, typer.Argument(help="Server name or hostname/IP. Uses current context if omitted.")] = None,
-        local_path: Annotated[str | None, typer.Argument(help="Local file to upload.")] = None,
-        remote_dir: Annotated[str | None, typer.Argument(help="Remote directory to upload into.")] = None,
+        local_path: Annotated[str, typer.Argument(help="Local file to upload.")],
+        remote_dir: Annotated[str, typer.Argument(help="Remote directory to upload into.")],
+        server: Annotated[str | None, typer.Option("--server", "-s", help="Server name or hostname/IP. Uses current context if omitted.")] = None,
         port: Annotated[int | None, typer.Option("--port", "-p")] = None,
         token: Annotated[str | None, typer.Option("--token", "-t")] = None,
     ) -> None:
         """Upload a local file to the remote server."""
-        if local_path is None or remote_dir is None:
-            typer.echo("Both local_path and remote_dir are required.", err=True)
-            raise typer.Exit(code=1)
         profile = _resolve_or_exit(server)
         host, p, tok = profile.host, port or profile.port, token or profile.token
 
@@ -151,16 +145,13 @@ def register(app: typer.Typer) -> None:
 
     @app.command(name="rm")
     def rm(
-        server: Annotated[str | None, typer.Argument(help="Server name or hostname/IP. Uses current context if omitted.")] = None,
-        remote_path: Annotated[str | None, typer.Argument(help="Remote file or directory to delete.")] = None,
+        remote_path: Annotated[str, typer.Argument(help="Remote file or directory to delete.")],
+        server: Annotated[str | None, typer.Option("--server", "-s", help="Server name or hostname/IP. Uses current context if omitted.")] = None,
         port: Annotated[int | None, typer.Option("--port", "-p")] = None,
         token: Annotated[str | None, typer.Option("--token", "-t")] = None,
         force: Annotated[bool, typer.Option("--force", "-f", help="Skip confirmation prompt.")] = False,
     ) -> None:
         """Delete a file or directory on the remote server."""
-        if remote_path is None:
-            typer.echo("Remote path is required.", err=True)
-            raise typer.Exit(code=1)
         profile = _resolve_or_exit(server)
         host, p, tok = profile.host, port or profile.port, token or profile.token
 
@@ -184,16 +175,13 @@ def register(app: typer.Typer) -> None:
 
     @app.command(name="mv")
     def mv(
-        server: Annotated[str | None, typer.Argument(help="Server name or hostname/IP. Uses current context if omitted.")] = None,
-        remote_path: Annotated[str | None, typer.Argument(help="Remote file or directory to rename.")] = None,
-        new_name: Annotated[str | None, typer.Argument(help="New name (filename only, not a path).")] = None,
+        remote_path: Annotated[str, typer.Argument(help="Remote file or directory to rename.")],
+        new_name: Annotated[str, typer.Argument(help="New name (filename only, not a path).")],
+        server: Annotated[str | None, typer.Option("--server", "-s", help="Server name or hostname/IP. Uses current context if omitted.")] = None,
         port: Annotated[int | None, typer.Option("--port", "-p")] = None,
         token: Annotated[str | None, typer.Option("--token", "-t")] = None,
     ) -> None:
         """Rename a file or directory on the remote server."""
-        if remote_path is None or new_name is None:
-            typer.echo("Both remote_path and new_name are required.", err=True)
-            raise typer.Exit(code=1)
         profile = _resolve_or_exit(server)
         host, p, tok = profile.host, port or profile.port, token or profile.token
 
@@ -218,16 +206,13 @@ def register(app: typer.Typer) -> None:
 
     @app.command(name="cat")
     def cat(
-        server: Annotated[str | None, typer.Argument(help="Server name or hostname/IP. Uses current context if omitted.")] = None,
-        remote_path: Annotated[str | None, typer.Argument(help="Remote file to preview.")] = None,
+        remote_path: Annotated[str, typer.Argument(help="Remote file to preview.")],
+        server: Annotated[str | None, typer.Option("--server", "-s", help="Server name or hostname/IP. Uses current context if omitted.")] = None,
         port: Annotated[int | None, typer.Option("--port", "-p")] = None,
         token: Annotated[str | None, typer.Option("--token", "-t")] = None,
         max_size: Annotated[int, typer.Option("--max-size", help="Max bytes to read.")] = 512_000,
     ) -> None:
         """Preview the text content of a remote file."""
-        if remote_path is None:
-            typer.echo("Remote path is required.", err=True)
-            raise typer.Exit(code=1)
         profile = _resolve_or_exit(server)
         host, p, tok = profile.host, port or profile.port, token or profile.token
 

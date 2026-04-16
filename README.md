@@ -38,31 +38,34 @@ tunnel-server --log-level debug               # verbose logging
 ### 2. Use the CLI
 
 ```bash
-# Execute remote commands (streaming output)
-tunnel exec myserver ls -la /home
-tunnel exec myserver tail -f /var/log/syslog
-tunnel exec myserver --cwd /var/log cat access.log
+# Execute remote commands (uses current context — see section 3)
+tunnel exec ls -la /home
+tunnel exec tail -f /var/log/syslog
+tunnel exec --cwd /var/log cat access.log
+
+# Override server per-command with --server / -s
+tunnel exec -s myserver uname -a
 
 # Batch mode — run multiple commands from a file
-tunnel exec myserver --script commands.txt
+tunnel exec --script commands.txt
 
 # Pipe support — read commands from stdin
-echo "uname -a" | tunnel exec myserver -
-cat deploy-steps.sh | tunnel exec prod -
+echo "uname -a" | tunnel exec -
+cat deploy-steps.sh | tunnel exec -s prod -
 
 # List remote directory
-tunnel ls myserver /var/log
-tunnel ls myserver /etc -l              # long format: permissions, size, date
+tunnel ls /var/log
+tunnel ls /etc -l              # long format: permissions, size, date
 
 # Download a remote file
-tunnel get myserver /etc/hostname
-tunnel get myserver /var/log/app.log ./local-copy.log
+tunnel get /etc/hostname
+tunnel get /var/log/app.log ./local-copy.log
 
 # Upload a local file
-tunnel put myserver ./backup.tar.gz /tmp
+tunnel put ./backup.tar.gz /tmp
 
 # Override port or token per-command
-tunnel exec myserver --port 2222 --token s3cret whoami
+tunnel exec -s myserver --port 2222 --token s3cret whoami
 ```
 
 ### 3. Named Server Profiles & Contexts
@@ -94,9 +97,9 @@ tunnel exec uname -a               # runs on prod (current context)
 tunnel ls /home                    # lists /home on prod
 tunnel get /etc/hostname           # downloads from prod
 
-# Override context per-command by passing a server explicitly
-tunnel exec staging uname -a
-tunnel exec 10.0.0.99 --token abc whoami
+# Override context per-command with --server / -s
+tunnel exec -s staging uname -a
+tunnel exec -s 10.0.0.99 --token abc whoami
 
 # Manage profiles
 tunnel config list
