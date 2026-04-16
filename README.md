@@ -15,17 +15,32 @@
 
 ## Installation
 
-### Global install (recommended — works from any terminal)
+### Install from GitHub (no clone needed)
 
 ```bash
-# Using pipx (best for CLI tools — isolated env, globally available)
+# Using pipx (recommended — isolated env, globally available)
+pipx install git+https://github.com/Ahmad-Said/tunnel-ssh.git
+
+# With extras (server or UI)
+pipx install "tunnel-ssh[server] @ git+https://github.com/Ahmad-Said/tunnel-ssh.git"
+pipx install "tunnel-ssh[all] @ git+https://github.com/Ahmad-Said/tunnel-ssh.git"
+
+# Or using pip
+pip install git+https://github.com/Ahmad-Said/tunnel-ssh.git
+```
+
+> **Don't have pipx?** `pip install pipx && pipx ensurepath` (restart your shell)
+
+### Install from a local clone
+
+```bash
+# Using pipx
 pipx install .
 
-# Or using pip with --user flag
+# Or pip with --user
 pip install --user .
 ```
 
-> **Don't have pipx?** Install it first: `pip install --user pipx && pipx ensurepath`
 
 ### Development install (editable, inside a venv)
 
@@ -396,7 +411,7 @@ See [`TODO.md`](TODO.md) for the full feature backlog. Highlights:
 - **Server:** Session management (persistent shell sessions), Docker image for Rocky Linux
 - **CLI:** Sudo support, multiple profiles from `~/.tunnel-ssh.json`
 - **UI:** Drag-and-drop upload, text file preview pane, multi-server tabs, theme switcher, auto-reconnect
-- **Packaging:** Standalone executables via PyInstaller / Nuitka, `pip install tunnel-ssh`
+- **Packaging:** Standalone executables via PyInstaller / Nuitka, Docker image for Rocky Linux
 - **Testing:** `pytest` unit & integration test suite
 
 ## License

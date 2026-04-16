@@ -58,9 +58,9 @@ dev = [
 # ── Console scripts ──────────────────────────────────────────────────────────
 
 [project.urls]
-Homepage    = "https://github.com/your-org/tunnel-ssh"
-Repository  = "https://github.com/your-org/tunnel-ssh"
-Bug-Tracker = "https://github.com/your-org/tunnel-ssh/issues"
+Homepage    = "https://github.com/Ahmad-Said/tunnel-ssh"
+Repository  = "https://github.com/Ahmad-Said/tunnel-ssh"
+Bug-Tracker = "https://github.com/Ahmad-Said/tunnel-ssh/issues"
 
 [project.scripts]
 tunnel-server = "tunnel_ssh.server.__main__:run"
