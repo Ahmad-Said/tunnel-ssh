@@ -65,21 +65,48 @@ tunnel put myserver ./backup.tar.gz /tmp
 tunnel exec myserver --port 2222 --token s3cret whoami
 ```
 
-### 3. Named Server Profiles
+### 3. Named Server Profiles & Contexts
 
-Save server configs in `~/.tunnel-ssh.json` so you never have to type host/port/token again:
+Save server configs in `~/.tunnel-ssh.json` so you never have to type host/port/token again.
+Works like `kubectl config` — set a **current context** and all commands use it by default:
 
 ```bash
+# Add server profiles
 tunnel config add prod --host 10.0.0.5 --port 2222 --token s3cret
-tunnel config add staging --host 10.0.0.10
-tunnel config list
-tunnel config remove staging
+tunnel config add staging --host 10.0.0.10 --token staging-tok
+tunnel config add dev --host 192.168.1.100 --token dev-tok
 
-# Now use the profile name instead of host:
-tunnel exec prod uname -a
-tunnel ls prod /home
-tunnel get prod /etc/hostname
+# Set the current context (like kubectl config use-context)
+tunnel config use-context prod
+
+# Show current context
+tunnel config current-context        # → prod
+
+# List all contexts (current one marked with *)
+tunnel config get-contexts
+#   CURRENT   NAME                 SERVER                         AUTH
+#   *         prod                 10.0.0.5:2222                  token
+#             staging              10.0.0.10:222                  token
+#             dev                  192.168.1.100:222              token
+
+# Now commands use the current context automatically — no server arg needed!
+tunnel exec uname -a               # runs on prod (current context)
+tunnel ls /home                    # lists /home on prod
+tunnel get /etc/hostname           # downloads from prod
+
+# Override context per-command by passing a server explicitly
+tunnel exec staging uname -a
+tunnel exec 10.0.0.99 --token abc whoami
+
+# Manage profiles
+tunnel config list
+tunnel config show prod
+tunnel config update prod --port 443
+tunnel config remove staging
 ```
+
+> **Config file location:** `~/.tunnel-ssh.json` (override with `$TUNNEL_SSH_CONFIG`).
+> See [`examples/tunnel-ssh-config.example.json`](examples/tunnel-ssh-config.example.json) for the full format.
 
 ### 4. Launch the Desktop UI
 

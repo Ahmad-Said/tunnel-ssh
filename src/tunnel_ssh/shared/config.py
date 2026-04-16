@@ -35,6 +35,7 @@ class ServerProfile(BaseModel):
 class TunnelConfig(BaseModel):
     """Top-level config file schema."""
 
+    current_context: str | None = None
     servers: dict[str, ServerProfile] = {}
 
 
@@ -61,13 +62,24 @@ def save_config(cfg: TunnelConfig) -> None:
     logger.debug("Config saved to %s", CONFIG_PATH)
 
 
-def resolve_server(name_or_host: str) -> ServerProfile:
+def resolve_server(name_or_host: str | None = None) -> ServerProfile:
     """Resolve a server argument.
 
-    If *name_or_host* matches a key in the config file, return that profile.
+    If *name_or_host* is ``None``, use the current context from config.
+    If it matches a key in the config file, return that profile.
     Otherwise treat it as a raw hostname and return a default profile.
     """
     cfg = load_config()
+
+    if name_or_host is None:
+        if cfg.current_context and cfg.current_context in cfg.servers:
+            logger.debug("Using current context '%s'", cfg.current_context)
+            return cfg.servers[cfg.current_context]
+        raise ValueError(
+            "No server specified and no current context set. "
+            "Use 'tunnel config use-context <name>' or pass a server argument."
+        )
+
     if name_or_host in cfg.servers:
         logger.debug("Resolved profile '%s'", name_or_host)
         return cfg.servers[name_or_host]

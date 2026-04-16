@@ -21,7 +21,7 @@ def register(app: typer.Typer) -> None:
 
     @app.command()
     def exec(
-        server: Annotated[str, typer.Argument(help="Server name (from config) or hostname/IP.")],
+        server: Annotated[str | None, typer.Argument(help="Server name (from config) or hostname/IP. Uses current context if omitted.")] = None,
         command: Annotated[list[str] | None, typer.Argument(help="The command (and arguments) to execute remotely.")] = None,
         port: Annotated[int | None, typer.Option("--port", "-p", help="Override server port.")] = None,
         cwd: Annotated[str | None, typer.Option("--cwd", "-C", help="Working directory on the remote machine.")] = None,
@@ -31,7 +31,11 @@ def register(app: typer.Typer) -> None:
         sudo: Annotated[bool, typer.Option("--sudo", help="Prepend 'sudo' to each command.")] = False,
     ) -> None:
         """Execute COMMAND on SERVER and stream the output to this terminal."""
-        profile = resolve_server(server)
+        try:
+            profile = resolve_server(server)
+        except ValueError as exc:
+            typer.echo(str(exc), err=True)
+            raise typer.Exit(code=1)
         host = profile.host
         p = port if port is not None else profile.port
         tok = token or profile.token

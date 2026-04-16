@@ -125,3 +125,49 @@ def config_path() -> None:
     typer.echo(str(_config_mod.CONFIG_PATH))
 
 
+# ── config use-context ───────────────────────────────────────────────────────
+
+@config_app.command(name="use-context")
+def config_use_context(
+    name: Annotated[str, typer.Argument(help="Profile name to set as the current context.")],
+) -> None:
+    """Set the current context (like ``kubectl config use-context``)."""
+    cfg = load_config()
+    if name not in cfg.servers:
+        typer.echo(f"Profile '{name}' not found. Add it first with: tunnel config add {name} --host <host>", err=True)
+        raise typer.Exit(code=1)
+
+    cfg.current_context = name
+    save_config(cfg)
+    typer.echo(f"Switched to context '{name}'.")
+
+
+# ── config current-context ───────────────────────────────────────────────────
+
+@config_app.command(name="current-context")
+def config_current_context() -> None:
+    """Display the current context."""
+    cfg = load_config()
+    if cfg.current_context:
+        typer.echo(cfg.current_context)
+    else:
+        typer.echo("No current context set. Use: tunnel config use-context <name>")
+
+
+# ── config get-contexts ──────────────────────────────────────────────────────
+
+@config_app.command(name="get-contexts")
+def config_get_contexts() -> None:
+    """List all contexts, highlighting the current one (like ``kubectl config get-contexts``)."""
+    cfg = load_config()
+    if not cfg.servers:
+        typer.echo("No profiles configured. Use: tunnel config add <name> --host <host>")
+        return
+
+    typer.echo(f"  {'CURRENT':<9} {'NAME':<20} {'SERVER':<30} {'AUTH'}")
+    for name, profile in cfg.servers.items():
+        marker = "*" if name == cfg.current_context else " "
+        auth = "token" if profile.token else ""
+        typer.echo(f"  {marker:<9} {name:<20} {profile.host}:{profile.port:<20} {auth}")
+
+

@@ -10,9 +10,18 @@ import httpx
 import typer
 
 from tunnel_ssh.cli.http_client import api_url, handle_connect_error, handle_http_error
-from tunnel_ssh.shared.config import resolve_server
+from tunnel_ssh.shared.config import ServerProfile, resolve_server
 from tunnel_ssh.shared.http import auth_headers
 from tunnel_ssh.shared.models import DirectoryListing
+
+
+def _resolve_or_exit(server: str | None) -> ServerProfile:
+    """Resolve server or exit with helpful message."""
+    try:
+        return resolve_server(server)
+    except ValueError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=1)
 
 
 def register(app: typer.Typer) -> None:
@@ -22,14 +31,14 @@ def register(app: typer.Typer) -> None:
 
     @app.command(name="ls")
     def ls(
-        server: Annotated[str, typer.Argument(help="Server name or hostname/IP.")],
+        server: Annotated[str | None, typer.Argument(help="Server name or hostname/IP. Uses current context if omitted.")] = None,
         path: Annotated[str, typer.Argument(help="Remote directory path.")] = "/",
         port: Annotated[int | None, typer.Option("--port", "-p")] = None,
         token: Annotated[str | None, typer.Option("--token", "-t")] = None,
         long: Annotated[bool, typer.Option("--long", "-l", help="Long format with size and permissions.")] = False,
     ) -> None:
         """List files in a remote directory."""
-        profile = resolve_server(server)
+        profile = _resolve_or_exit(server)
         host, p, tok = profile.host, port or profile.port, token or profile.token
 
         url = api_url(host, p, "/files")
@@ -58,14 +67,17 @@ def register(app: typer.Typer) -> None:
 
     @app.command(name="get")
     def get(
-        server: Annotated[str, typer.Argument(help="Server name or hostname/IP.")],
-        remote_path: Annotated[str, typer.Argument(help="Remote file path to download.")],
+        server: Annotated[str | None, typer.Argument(help="Server name or hostname/IP. Uses current context if omitted.")] = None,
+        remote_path: Annotated[str | None, typer.Argument(help="Remote file path to download.")] = None,
         local_path: Annotated[str | None, typer.Argument(help="Local destination (default: current dir).")] = None,
         port: Annotated[int | None, typer.Option("--port", "-p")] = None,
         token: Annotated[str | None, typer.Option("--token", "-t")] = None,
     ) -> None:
         """Download a file from the remote server."""
-        profile = resolve_server(server)
+        if remote_path is None:
+            typer.echo("Remote path is required.", err=True)
+            raise typer.Exit(code=1)
+        profile = _resolve_or_exit(server)
         host, p, tok = profile.host, port or profile.port, token or profile.token
 
         url = api_url(host, p, "/file")
@@ -97,14 +109,17 @@ def register(app: typer.Typer) -> None:
 
     @app.command(name="put")
     def put(
-        server: Annotated[str, typer.Argument(help="Server name or hostname/IP.")],
-        local_path: Annotated[str, typer.Argument(help="Local file to upload.")],
-        remote_dir: Annotated[str, typer.Argument(help="Remote directory to upload into.")],
+        server: Annotated[str | None, typer.Argument(help="Server name or hostname/IP. Uses current context if omitted.")] = None,
+        local_path: Annotated[str | None, typer.Argument(help="Local file to upload.")] = None,
+        remote_dir: Annotated[str | None, typer.Argument(help="Remote directory to upload into.")] = None,
         port: Annotated[int | None, typer.Option("--port", "-p")] = None,
         token: Annotated[str | None, typer.Option("--token", "-t")] = None,
     ) -> None:
         """Upload a local file to the remote server."""
-        profile = resolve_server(server)
+        if local_path is None or remote_dir is None:
+            typer.echo("Both local_path and remote_dir are required.", err=True)
+            raise typer.Exit(code=1)
+        profile = _resolve_or_exit(server)
         host, p, tok = profile.host, port or profile.port, token or profile.token
 
         src = Path(local_path)
@@ -136,14 +151,17 @@ def register(app: typer.Typer) -> None:
 
     @app.command(name="rm")
     def rm(
-        server: Annotated[str, typer.Argument(help="Server name or hostname/IP.")],
-        remote_path: Annotated[str, typer.Argument(help="Remote file or directory to delete.")],
+        server: Annotated[str | None, typer.Argument(help="Server name or hostname/IP. Uses current context if omitted.")] = None,
+        remote_path: Annotated[str | None, typer.Argument(help="Remote file or directory to delete.")] = None,
         port: Annotated[int | None, typer.Option("--port", "-p")] = None,
         token: Annotated[str | None, typer.Option("--token", "-t")] = None,
         force: Annotated[bool, typer.Option("--force", "-f", help="Skip confirmation prompt.")] = False,
     ) -> None:
         """Delete a file or directory on the remote server."""
-        profile = resolve_server(server)
+        if remote_path is None:
+            typer.echo("Remote path is required.", err=True)
+            raise typer.Exit(code=1)
+        profile = _resolve_or_exit(server)
         host, p, tok = profile.host, port or profile.port, token or profile.token
 
         if not force:
@@ -166,14 +184,17 @@ def register(app: typer.Typer) -> None:
 
     @app.command(name="mv")
     def mv(
-        server: Annotated[str, typer.Argument(help="Server name or hostname/IP.")],
-        remote_path: Annotated[str, typer.Argument(help="Remote file or directory to rename.")],
-        new_name: Annotated[str, typer.Argument(help="New name (filename only, not a path).")],
+        server: Annotated[str | None, typer.Argument(help="Server name or hostname/IP. Uses current context if omitted.")] = None,
+        remote_path: Annotated[str | None, typer.Argument(help="Remote file or directory to rename.")] = None,
+        new_name: Annotated[str | None, typer.Argument(help="New name (filename only, not a path).")] = None,
         port: Annotated[int | None, typer.Option("--port", "-p")] = None,
         token: Annotated[str | None, typer.Option("--token", "-t")] = None,
     ) -> None:
         """Rename a file or directory on the remote server."""
-        profile = resolve_server(server)
+        if remote_path is None or new_name is None:
+            typer.echo("Both remote_path and new_name are required.", err=True)
+            raise typer.Exit(code=1)
+        profile = _resolve_or_exit(server)
         host, p, tok = profile.host, port or profile.port, token or profile.token
 
         url = api_url(host, p, "/file")
@@ -197,14 +218,17 @@ def register(app: typer.Typer) -> None:
 
     @app.command(name="cat")
     def cat(
-        server: Annotated[str, typer.Argument(help="Server name or hostname/IP.")],
-        remote_path: Annotated[str, typer.Argument(help="Remote file to preview.")],
+        server: Annotated[str | None, typer.Argument(help="Server name or hostname/IP. Uses current context if omitted.")] = None,
+        remote_path: Annotated[str | None, typer.Argument(help="Remote file to preview.")] = None,
         port: Annotated[int | None, typer.Option("--port", "-p")] = None,
         token: Annotated[str | None, typer.Option("--token", "-t")] = None,
         max_size: Annotated[int, typer.Option("--max-size", help="Max bytes to read.")] = 512_000,
     ) -> None:
         """Preview the text content of a remote file."""
-        profile = resolve_server(server)
+        if remote_path is None:
+            typer.echo("Remote path is required.", err=True)
+            raise typer.Exit(code=1)
+        profile = _resolve_or_exit(server)
         host, p, tok = profile.host, port or profile.port, token or profile.token
 
         url = api_url(host, p, "/file/preview")

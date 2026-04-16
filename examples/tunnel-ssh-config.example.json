@@ -1,0 +1,26 @@
+{
+  "current_context": "dev",
+  "servers": {
+    "dev": {
+      "host": "192.168.1.100",
+      "port": 222,
+      "token": "my-dev-secret-token"
+    },
+    "staging": {
+      "host": "staging.example.com",
+      "port": 222,
+      "token": "my-staging-secret-token"
+    },
+    "prod": {
+      "host": "prod.example.com",
+      "port": 443,
+      "token": "my-prod-secret-token"
+    },
+    "local": {
+      "host": "localhost",
+      "port": 222,
+      "token": null
+    }
+  }
+}
+
