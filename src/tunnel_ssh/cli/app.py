@@ -16,7 +16,6 @@ from tunnel_ssh.cli.commands import files as files_cmd
 app = typer.Typer(
     name="tunnel",
     help="Remote execution and file management via tunnel-ssh.",
-    add_completion=False,
 )
 
 # Register all command groups

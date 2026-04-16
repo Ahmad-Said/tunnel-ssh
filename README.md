@@ -13,11 +13,44 @@
 
 ---
 
+## Installation
+
+### Global install (recommended — works from any terminal)
+
+```bash
+# Using pipx (best for CLI tools — isolated env, globally available)
+pipx install .
+
+# Or using pip with --user flag
+pip install --user .
+```
+
+> **Don't have pipx?** Install it first: `pip install --user pipx && pipx ensurepath`
+
+### Development install (editable, inside a venv)
+
+```bash
+cd tunnel-ssh
+python -m venv .venv
+# Windows PowerShell
+.venv\Scripts\Activate.ps1
+# Linux / macOS
+source .venv/bin/activate
+
+pip install -e ".[dev]"
+```
+
+> ⚠️ A venv install only makes `tunnel` available while the venv is activated.
+> For shell completion and system-wide access, use `pipx install` instead.
+
+---
+
 ## Quick Start
 
 ```bash
-# Clone & install (editable mode)
-cd tunnel-ssh
+# If not installed globally yet:
+pipx install .
+# Or for development:
 pip install -e .
 ```
 
@@ -111,7 +144,92 @@ tunnel config remove staging
 > **Config file location:** `~/.tunnel-ssh.json` (override with `$TUNNEL_SSH_CONFIG`).
 > See [`examples/tunnel-ssh-config.example.json`](examples/tunnel-ssh-config.example.json) for the full format.
 
-### 4. Launch the Desktop UI
+### 4. Shell Completion (Tab Suggestions)
+
+Enable tab-completion for commands, options, and arguments — similar to `kubectl completion`.
+
+> **Prerequisite:** `tunnel` must be globally available (installed via `pipx install .` or `pip install --user .`).
+> Shell completion won't work if `tunnel` is only installed inside a virtualenv.
+
+#### Automatic install (all shells)
+
+```bash
+tunnel --install-completion
+```
+
+This auto-detects your shell and installs the completion script. Restart your shell afterwards.
+
+#### Manual setup per shell
+
+<details>
+<summary><strong>PowerShell</strong></summary>
+
+Add this line to your PowerShell profile (`$PROFILE`):
+
+```powershell
+tunnel --show-completion powershell | Out-String | Invoke-Expression
+```
+
+Or install permanently:
+
+```powershell
+tunnel --install-completion powershell
+```
+
+</details>
+
+<details>
+<summary><strong>Bash</strong></summary>
+
+Add to `~/.bashrc`:
+
+```bash
+eval "$(tunnel --show-completion bash)"
+```
+
+Or install permanently:
+
+```bash
+tunnel --install-completion bash
+```
+
+</details>
+
+<details>
+<summary><strong>Zsh</strong></summary>
+
+Add to `~/.zshrc`:
+
+```zsh
+eval "$(tunnel --show-completion zsh)"
+```
+
+Or install permanently:
+
+```zsh
+tunnel --install-completion zsh
+```
+
+</details>
+
+<details>
+<summary><strong>Fish</strong></summary>
+
+```fish
+tunnel --show-completion fish | source
+```
+
+Or install permanently:
+
+```fish
+tunnel --install-completion fish
+```
+
+</details>
+
+After setup, press **Tab** to get suggestions for commands (`exec`, `ls`, `config`, …), options (`--server`, `--port`, …), and sub-commands (`config add`, `config use-context`, …).
+
+### 5. Launch the Desktop UI
 
 ```bash
 tunnel-ui

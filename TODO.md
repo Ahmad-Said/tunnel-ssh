@@ -54,7 +54,7 @@ if you see missing feature todo add it
 ## 📦 Packaging & Distribution
 
 - [ ] **Standalone executables** — Build with `PyInstaller` or `Nuitka` for single-binary distribution (no Python required on client)
-- [ ] **CLI installer** — `pip install tunnel-ssh` to get the CLI tool globally available
+- [x] **CLI installer** — `pip install tunnel-ssh` to get the CLI tool globally available
 - [ ] **Docker image** — `Dockerfile` for the server component (`docker run -p 222:222 tunnel-ssh-server`)
 - [ ] Build server for rocky linux even on widnwos using docker
 
