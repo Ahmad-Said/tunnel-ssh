@@ -30,6 +30,17 @@ pip install git+https://github.com/Ahmad-Said/tunnel-ssh.git
 ```
 
 > **Don't have pipx?** `pip install pipx && pipx ensurepath` (restart your shell)
+>
+> **Windows users:** You can install Python and pipx easily via [Scoop](https://scoop.sh):
+> ```powershell
+> # Install Scoop (see https://scoop.sh for details)
+> Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+> Invoke-RestMethod -Uri https://get.scoop.sh | Invoke-Expression
+>
+> # Then install Python and pipx
+> scoop install python
+> pip install pipx && pipx ensurepath
+> ```
 
 ### Install from a local clone
 

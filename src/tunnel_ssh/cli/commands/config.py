@@ -17,6 +17,12 @@ from tunnel_ssh.shared.config import (
 config_app = typer.Typer(name="config", help="Manage saved server profiles (~/.tunnel-ssh.json).")
 
 
+def _complete_profile_name(incomplete: str) -> list[str]:
+    """Return profile names matching *incomplete* for shell completion."""
+    cfg = load_config()
+    return [name for name in cfg.servers if name.startswith(incomplete)]
+
+
 def register(app: typer.Typer) -> None:
     """Register the ``config`` sub-app on *app*."""
     app.add_typer(config_app, name="config")
@@ -42,7 +48,7 @@ def config_add(
 
 @config_app.command(name="show")
 def config_show(
-    name: Annotated[str, typer.Argument(help="Profile name to display.")],
+    name: Annotated[str, typer.Argument(help="Profile name to display.", autocompletion=_complete_profile_name)],
 ) -> None:
     """Display details of a single saved profile."""
     cfg = load_config()
@@ -76,7 +82,7 @@ def config_list() -> None:
 
 @config_app.command(name="update")
 def config_update(
-    name: Annotated[str, typer.Argument(help="Profile name to update.")],
+    name: Annotated[str, typer.Argument(help="Profile name to update.", autocompletion=_complete_profile_name)],
     host: Annotated[str | None, typer.Option("--host", "-H", help="New hostname or IP.")] = None,
     port: Annotated[int | None, typer.Option("--port", "-p", help="New port.")] = None,
     token: Annotated[str | None, typer.Option("--token", "-t", help="New auth token.")] = None,
@@ -104,7 +110,7 @@ def config_update(
 
 @config_app.command(name="remove")
 def config_remove(
-    name: Annotated[str, typer.Argument(help="Profile name to remove.")],
+    name: Annotated[str, typer.Argument(help="Profile name to remove.", autocompletion=_complete_profile_name)],
 ) -> None:
     """Remove a saved server profile."""
     cfg = load_config()
@@ -129,7 +135,7 @@ def config_path() -> None:
 
 @config_app.command(name="use-context")
 def config_use_context(
-    name: Annotated[str, typer.Argument(help="Profile name to set as the current context.")],
+    name: Annotated[str, typer.Argument(help="Profile name to set as the current context.", autocompletion=_complete_profile_name)],
 ) -> None:
     """Set the current context (like ``kubectl config use-context``)."""
     cfg = load_config()
