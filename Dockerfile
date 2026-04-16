@@ -5,7 +5,9 @@ FROM ubuntu:24.04
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Install Python, pip, bash, and common utilities for testing
-RUN apt-get update && \
+RUN rm -rf /var/lib/apt/lists/* && \
+    apt-get clean && \
+    apt-get update && \
     apt-get install -y --no-install-recommends \
         python3 \
         python3-pip \
