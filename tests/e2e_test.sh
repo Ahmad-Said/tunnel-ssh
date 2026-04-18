@@ -220,6 +220,37 @@ assert_contains "ls defaults to session cwd" "$OUTPUT" "example.txt"
 # Cleanup
 tunnel exec "rm -rf /tmp/e2e-upload-dir" 2>&1 || true
 
+# ── Test: exec --script — send a script file and run each line ────────────────
+echo ""
+bold "--- Test: send script file (--script) ---"
+
+cat > .e2e_script_test.sh << 'SCRIPT'
+echo script-line-one
+echo script-line-two
+# this comment should be skipped
+echo script-line-three
+SCRIPT
+
+OUTPUT=$(tunnel exec --script .e2e_script_test.sh --cwd /tmp 2>&1 || true)
+assert_contains "script: line 1 executed" "$OUTPUT" "script-line-one"
+assert_contains "script: line 2 executed" "$OUTPUT" "script-line-two"
+assert_contains "script: line 3 executed" "$OUTPUT" "script-line-three"
+rm -f .e2e_script_test.sh
+
+# ── Test: exec --script-raw — send a raw shell script (heredocs, pipes, etc.) ─
+echo ""
+bold "--- Test: send raw shell script with heredoc (--script-raw) ---"
+
+tunnel exec --script-raw tests/here.sh --cwd /tmp 2>&1 || true
+
+# The script uses a heredoc to create here.txt on the remote — verify it worked
+OUTPUT=$(tunnel exec "cat /tmp/here.txt" 2>&1 || true)
+assert_contains "raw script: heredoc file created" "$OUTPUT" "Here is the content of the file"
+assert_contains "raw script: heredoc multiline preserved" "$OUTPUT" "You can upload this file"
+
+# Cleanup
+tunnel exec "rm -f /tmp/here.txt" 2>&1 || true
+
 # ── Test: auth — wrong token rejected ────────────────────────────────────────
 echo ""
 bold "--- Test: auth rejection ---"
