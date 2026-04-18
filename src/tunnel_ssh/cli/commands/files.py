@@ -139,6 +139,7 @@ def register(app: typer.Typer) -> None:
         server: Annotated[str | None, typer.Option("--server", "-s", help="Server name or hostname/IP. Uses current context if omitted.")] = None,
         port: Annotated[int | None, typer.Option("--port", "-p")] = None,
         token: Annotated[str | None, typer.Option("--token", "-t")] = None,
+        rename: Annotated[str | None, typer.Option("--as", help="Rename the file on the remote server.")] = None,
     ) -> None:
         """Upload a local file to the remote server.
 
@@ -146,8 +147,9 @@ def register(app: typer.Typer) -> None:
         directory (set via ``tunnel exec cd …``), falling back to ``/``.
 
         Examples:
-            tunnel put ./app.log /var/log       Upload app.log into /var/log/
-            tunnel put ./app.log                Upload into remote cwd (or /)
+            tunnel put ./app.log /var/log           Upload app.log into /var/log/
+            tunnel put ./app.log                    Upload into remote cwd (or /)
+            tunnel put .env.prod /root/ --as .env   Upload and rename to .env
         """
         profile = _resolve_or_exit(server)
         host, p, tok = profile.host, port or profile.port, token or profile.token
@@ -157,18 +159,20 @@ def register(app: typer.Typer) -> None:
         else:
             remote_dir = _sanitize_path(remote_dir)
 
-        src = Path(local_path)
+        # Use pathlib.Path for cross-platform path resolution (fixes Windows backslash handling)
+        src = Path(local_path).resolve()
         if not src.is_file():
             typer.echo(f"Local file not found: {src}", err=True)
             raise typer.Exit(code=1)
 
+        upload_name = rename or src.name
         url = api_url(host, p, "/file")
         try:
             with open(src, "rb") as f:
                 resp = httpx.post(
                     url,
                     params={"path": remote_dir},
-                    files={"file": (src.name, f)},
+                    files={"file": (upload_name, f)},
                     headers=auth_headers(tok),
                     timeout=60,
                 )

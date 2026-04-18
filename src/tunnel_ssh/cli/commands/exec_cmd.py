@@ -30,6 +30,7 @@ def register(app: typer.Typer) -> None:
         script: Annotated[str | None, typer.Option("--script", "-S", help="Path to a file with commands (one per line).")] = None,
         script_raw: Annotated[str | None, typer.Option("--script-raw", "-R", help="Path to a shell script to execute as a single unit (preserves heredocs, pipes, etc.).")] = None,
         sudo: Annotated[bool, typer.Option("--sudo", help="Prepend 'sudo' to each command.")] = False,
+        verbose: Annotated[bool, typer.Option("--verbose", "-v", help="Print exit code after each command.")] = False,
     ) -> None:
         """Execute COMMAND on SERVER and stream the output to this terminal."""
         try:
@@ -55,6 +56,8 @@ def register(app: typer.Typer) -> None:
                 if len(commands_to_run) > 1:
                     typer.echo(f"▶ {cmd}", err=True)
                 exit_code = asyncio.run(execute_remote(host, p, cmd, cwd, tok, timeout))
+                if verbose:
+                    typer.echo(f"[exit {exit_code}]", err=True)
                 if exit_code != 0:
                     worst_exit = exit_code
         except KeyboardInterrupt:
