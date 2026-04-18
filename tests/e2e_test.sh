@@ -167,7 +167,7 @@ assert_contains "ls /app has src/" "$OUTPUT" "src/"
 echo ""
 bold "--- Test: cat /etc/os-release ---"
 OUTPUT=$(tunnel cat /etc/os-release 2>&1 || true)
-assert_contains "cat os-release has Ubuntu" "$OUTPUT" "Ubuntu"
+assert_contains "cat os-release has ID" "$OUTPUT" "ID=debian"
 
 # ── Test: put + get — file round-trip ────────────────────────────────────────
 echo ""
@@ -191,6 +191,34 @@ bold "--- Test: rm delete file ---"
 tunnel exec "echo deleteme > /tmp/to_delete.txt" 2>&1 || true
 OUTPUT=$(tunnel rm /tmp/to_delete.txt --force 2>&1 || true)
 assert_contains "rm reports deleted" "$OUTPUT" "Deleted"
+
+# ── Test: session cwd — mkdir, cd, pwd, put ──────────────────────────────────
+echo ""
+bold "--- Test: session cwd + put into user directory ---"
+
+# Create a directory on the remote server
+tunnel exec "mkdir -p /tmp/e2e-upload-dir" 2>&1 || true
+
+# Change to that directory (sets user session cwd)
+tunnel exec "cd /tmp/e2e-upload-dir" 2>&1 || true
+
+# Verify pwd reflects the new cwd
+OUTPUT=$(tunnel exec pwd 2>&1 || true)
+assert_contains "pwd after cd" "$OUTPUT" "/tmp/e2e-upload-dir"
+
+# Upload example.txt without specifying remote dir — should use session cwd
+tunnel put tests/example.txt 2>&1 || true
+
+# Verify the file landed in the session cwd directory
+OUTPUT=$(tunnel exec "cat /tmp/e2e-upload-dir/example.txt" 2>&1 || true)
+assert_contains "put used session cwd" "$OUTPUT" "example file"
+
+# Also verify tunnel ls defaults to the session cwd
+OUTPUT=$(tunnel ls 2>&1 || true)
+assert_contains "ls defaults to session cwd" "$OUTPUT" "example.txt"
+
+# Cleanup
+tunnel exec "rm -rf /tmp/e2e-upload-dir" 2>&1 || true
 
 # ── Test: auth — wrong token rejected ────────────────────────────────────────
 echo ""

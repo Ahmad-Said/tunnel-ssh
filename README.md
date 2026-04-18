@@ -22,6 +22,9 @@ to interact with it:
 # Using pipx (recommended — isolated env, globally available)
 pipx install git+https://github.com/Ahmad-Said/tunnel-ssh.git
 
+or via py
+py -3.14 -m pipx install --force git+https://github.com/Ahmad-Said/tunnel-ssh.git
+
 # With extras (server or UI)
 pipx install "tunnel-ssh[server] @ git+https://github.com/Ahmad-Said/tunnel-ssh.git"
 pipx install "tunnel-ssh[all] @ git+https://github.com/Ahmad-Said/tunnel-ssh.git"
