@@ -10,7 +10,7 @@ import httpx
 import typer
 
 from tunnel_ssh.cli.completions import complete_remote_path
-from tunnel_ssh.cli.http_client import api_url, handle_connect_error, handle_http_error
+from tunnel_ssh.cli.http_client import api_url, fetch_session_cwd, handle_connect_error, handle_http_error
 from tunnel_ssh.shared.config import ServerProfile, resolve_server
 from tunnel_ssh.shared.http import auth_headers
 from tunnel_ssh.shared.models import DirectoryListing
@@ -32,15 +32,22 @@ def register(app: typer.Typer) -> None:
 
     @app.command(name="ls")
     def ls(
-        path: Annotated[str, typer.Argument(help="Remote directory path.", autocompletion=complete_remote_path)] = "/",
+        path: Annotated[str | None, typer.Argument(help="Remote directory path (default: remote cwd or /).", autocompletion=complete_remote_path)] = None,
         server: Annotated[str | None, typer.Option("--server", "-s", help="Server name or hostname/IP. Uses current context if omitted.")] = None,
         port: Annotated[int | None, typer.Option("--port", "-p")] = None,
         token: Annotated[str | None, typer.Option("--token", "-t")] = None,
         long: Annotated[bool, typer.Option("--long", "-l", help="Long format with size and permissions.")] = False,
     ) -> None:
-        """List files in a remote directory."""
+        """List files in a remote directory.
+
+        Defaults to the user's current remote working directory (set via
+        ``tunnel exec cd …``), falling back to ``/``.
+        """
         profile = _resolve_or_exit(server)
         host, p, tok = profile.host, port or profile.port, token or profile.token
+
+        if path is None:
+            path = fetch_session_cwd(host, p, tok) or "/"
 
         url = api_url(host, p, "/files")
         try:
@@ -74,7 +81,12 @@ def register(app: typer.Typer) -> None:
         port: Annotated[int | None, typer.Option("--port", "-p")] = None,
         token: Annotated[str | None, typer.Option("--token", "-t")] = None,
     ) -> None:
-        """Download a file from the remote server."""
+        """Download a file from the remote server.
+
+        Examples:
+            tunnel get /etc/hostname              Download to current directory
+            tunnel get /var/log/app.log ./copy.log Download to specific local path
+        """
         profile = _resolve_or_exit(server)
         host, p, tok = profile.host, port or profile.port, token or profile.token
 
@@ -108,14 +120,25 @@ def register(app: typer.Typer) -> None:
     @app.command(name="put")
     def put(
         local_path: Annotated[str, typer.Argument(help="Local file to upload.")],
-        remote_dir: Annotated[str, typer.Argument(help="Remote directory to upload into.", autocompletion=complete_remote_path)],
+        remote_dir: Annotated[str | None, typer.Argument(help="Remote directory to upload into (default: /).", autocompletion=complete_remote_path)] = None,
         server: Annotated[str | None, typer.Option("--server", "-s", help="Server name or hostname/IP. Uses current context if omitted.")] = None,
         port: Annotated[int | None, typer.Option("--port", "-p")] = None,
         token: Annotated[str | None, typer.Option("--token", "-t")] = None,
     ) -> None:
-        """Upload a local file to the remote server."""
+        """Upload a local file to the remote server.
+
+        If REMOTE_DIR is omitted, uploads into the user's current remote working
+        directory (set via ``tunnel exec cd …``), falling back to ``/``.
+
+        Examples:
+            tunnel put ./app.log /var/log       Upload app.log into /var/log/
+            tunnel put ./app.log                Upload into remote cwd (or /)
+        """
         profile = _resolve_or_exit(server)
         host, p, tok = profile.host, port or profile.port, token or profile.token
+
+        if remote_dir is None:
+            remote_dir = fetch_session_cwd(host, p, tok) or "/"
 
         src = Path(local_path)
         if not src.is_file():

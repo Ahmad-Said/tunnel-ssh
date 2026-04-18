@@ -19,8 +19,9 @@ import logging
 import os
 import re
 
-from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect, status
+from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect, status
 
+from tunnel_ssh.server.auth import verify_token
 from tunnel_ssh.server.settings import settings
 from tunnel_ssh.shared.models import CommandOutput, CommandPayload, StdinInput
 
@@ -45,6 +46,12 @@ def _set_user_cwd(user_id: str | None, cwd: str) -> None:
     """Persist the working directory for *user_id* in memory."""
     if user_id:
         _user_sessions.setdefault(user_id, {})["cwd"] = cwd
+
+
+@router.get("/session/cwd", dependencies=[Depends(verify_token)])
+async def get_session_cwd(user_id: str = Query(..., description="Client user ID")) -> dict[str, str | None]:
+    """Return the last known working directory for *user_id*."""
+    return {"cwd": _get_user_cwd(user_id)}
 
 # ── Sudo helpers ─────────────────────────────────────────────────────────────
 

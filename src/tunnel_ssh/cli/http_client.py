@@ -15,7 +15,7 @@ import typer
 import websockets
 
 from tunnel_ssh.shared.config import get_or_create_user_id
-from tunnel_ssh.shared.http import ws_url
+from tunnel_ssh.shared.http import auth_headers, ws_url
 from tunnel_ssh.shared.models import CommandOutput, CommandPayload, StdinInput
 
 logger = logging.getLogger("tunnel-ssh.cli")
@@ -26,6 +26,25 @@ logger = logging.getLogger("tunnel-ssh.cli")
 def api_url(host: str, port: int, path: str) -> str:
     """Build a full HTTP URL for a server endpoint."""
     return f"http://{host}:{port}{path}"
+
+
+def fetch_session_cwd(host: str, port: int, token: str | None) -> str | None:
+    """Ask the server for the current user's last known working directory.
+
+    Returns ``None`` on any failure (server unreachable, no session, etc.).
+    """
+    try:
+        user_id = get_or_create_user_id()
+        resp = httpx.get(
+            api_url(host, port, "/session/cwd"),
+            params={"user_id": user_id},
+            headers=auth_headers(token),
+            timeout=5,
+        )
+        resp.raise_for_status()
+        return resp.json().get("cwd")
+    except Exception:
+        return None
 
 
 def handle_http_error(exc: httpx.HTTPStatusError) -> None:
