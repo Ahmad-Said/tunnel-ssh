@@ -14,6 +14,7 @@ import httpx
 import typer
 import websockets
 
+from tunnel_ssh.shared.config import get_or_create_user_id
 from tunnel_ssh.shared.http import ws_url
 from tunnel_ssh.shared.models import CommandOutput, CommandPayload, StdinInput
 
@@ -54,7 +55,8 @@ async def execute_remote(
     Returns the remote process exit code (or 1 on connection failure).
     """
     uri = ws_url(host, port, token)
-    payload = CommandPayload(command=command, cwd=cwd)
+    user_id = get_or_create_user_id()
+    payload = CommandPayload(command=command, cwd=cwd, user_id=user_id)
 
     try:
         async with websockets.connect(uri, open_timeout=timeout) as ws:

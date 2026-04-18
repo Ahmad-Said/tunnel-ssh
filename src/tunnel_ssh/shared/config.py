@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import uuid
 from pathlib import Path
 
 from pydantic import BaseModel
@@ -37,6 +38,7 @@ class TunnelConfig(BaseModel):
 
     current_context: str | None = None
     servers: dict[str, ServerProfile] = {}
+    user_id: str | None = None
 
 
 # ── Persistence ──────────────────────────────────────────────────────────────
@@ -62,6 +64,17 @@ def save_config(cfg: TunnelConfig) -> None:
     logger.debug("Config saved to %s", CONFIG_PATH)
 
 
+def get_or_create_user_id() -> str:
+    """Return the persistent user ID, generating one on first use."""
+    cfg = load_config()
+    if cfg.user_id:
+        return cfg.user_id
+    cfg.user_id = uuid.uuid4().hex
+    save_config(cfg)
+    logger.info("Generated new user ID: %s", cfg.user_id)
+    return cfg.user_id
+
+
 def resolve_server(name_or_host: str | None = None) -> ServerProfile:
     """Resolve a server argument.
 
@@ -84,4 +97,3 @@ def resolve_server(name_or_host: str | None = None) -> ServerProfile:
         logger.debug("Resolved profile '%s'", name_or_host)
         return cfg.servers[name_or_host]
     return ServerProfile(host=name_or_host)
-

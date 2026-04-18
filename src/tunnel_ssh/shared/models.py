@@ -45,6 +45,7 @@ class CommandPayload(BaseModel):
 
     command: str
     cwd: str | None = None
+    user_id: str | None = None
 
 
 class CommandOutput(BaseModel):

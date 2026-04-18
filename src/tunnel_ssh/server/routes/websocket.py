@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import re
 
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect, status
@@ -26,6 +27,24 @@ from tunnel_ssh.shared.models import CommandOutput, CommandPayload, StdinInput
 logger = logging.getLogger("tunnel-ssh.server.ws")
 
 router = APIRouter(tags=["execute"])
+
+# ── Per-user session state (in-memory, lives as long as the server) ──────────
+
+_user_sessions: dict[str, dict] = {}
+"""Maps user_id → session dict. Currently tracks ``cwd`` (last working directory)."""
+
+
+def _get_user_cwd(user_id: str | None) -> str | None:
+    """Return the last known working directory for *user_id*, or ``None``."""
+    if user_id and user_id in _user_sessions:
+        return _user_sessions[user_id].get("cwd")
+    return None
+
+
+def _set_user_cwd(user_id: str | None, cwd: str) -> None:
+    """Persist the working directory for *user_id* in memory."""
+    if user_id:
+        _user_sessions.setdefault(user_id, {})["cwd"] = cwd
 
 # ── Sudo helpers ─────────────────────────────────────────────────────────────
 
@@ -74,7 +93,10 @@ async def ws_execute(ws: WebSocket, token: str | None = Query(default=None)) -> 
         while True:
             raw = await ws.receive_text()
             payload = CommandPayload.model_validate_json(raw)
-            logger.info("Execute: %s (cwd=%s)", payload.command, payload.cwd)
+            logger.info("Execute: %s (cwd=%s, user=%s)", payload.command, payload.cwd, payload.user_id)
+
+            # Resolve working directory: explicit > user session > server default
+            effective_cwd = payload.cwd or _get_user_cwd(payload.user_id)
 
             command = payload.command
             sudo = _is_sudo_command(command)
@@ -82,13 +104,26 @@ async def ws_execute(ws: WebSocket, token: str | None = Query(default=None)) -> 
                 command = _inject_sudo_s(command)
                 logger.debug("Sudo detected — rewritten command: %s", command)
 
+            # ── Handle `cd` specially — update user session cwd ─────────
+            cd_match = re.match(r"^\s*cd\s+(.*)", command)
+            if cd_match and payload.user_id:
+                target = cd_match.group(1).strip().strip("'\"")
+                # Resolve relative to current effective cwd
+                if effective_cwd:
+                    target = os.path.normpath(os.path.join(effective_cwd, target)) if not os.path.isabs(target) else target
+                _set_user_cwd(payload.user_id, target)
+                await ws.send_text(
+                    CommandOutput(stream="exit", data="0").model_dump_json()
+                )
+                continue
+
             try:
                 proc = await asyncio.create_subprocess_shell(
                     command,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
                     stdin=asyncio.subprocess.PIPE if sudo else None,
-                    cwd=payload.cwd,
+                    cwd=effective_cwd,
                     executable=settings.shell_path,
                 )
             except (FileNotFoundError, PermissionError, OSError) as exc:
@@ -168,6 +203,11 @@ async def ws_execute(ws: WebSocket, token: str | None = Query(default=None)) -> 
 
             exit_code = await proc.wait()
             proc = None
+
+            # Persist the effective cwd for this user's session
+            if payload.user_id and effective_cwd:
+                _set_user_cwd(payload.user_id, effective_cwd)
+
             await ws.send_text(
                 CommandOutput(stream="exit", data=str(exit_code)).model_dump_json()
             )
