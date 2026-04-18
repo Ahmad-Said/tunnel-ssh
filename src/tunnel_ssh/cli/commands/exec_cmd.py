@@ -28,6 +28,7 @@ def register(app: typer.Typer) -> None:
         token: Annotated[str | None, typer.Option("--token", "-t", help="Override auth token.")] = None,
         timeout: Annotated[float, typer.Option("--timeout", help="Connection timeout in seconds.")] = 10.0,
         script: Annotated[str | None, typer.Option("--script", "-S", help="Path to a file with commands (one per line).")] = None,
+        script_raw: Annotated[str | None, typer.Option("--script-raw", "-R", help="Path to a shell script to execute as a single unit (preserves heredocs, pipes, etc.).")] = None,
         sudo: Annotated[bool, typer.Option("--sudo", help="Prepend 'sudo' to each command.")] = False,
     ) -> None:
         """Execute COMMAND on SERVER and stream the output to this terminal."""
@@ -41,7 +42,7 @@ def register(app: typer.Typer) -> None:
         tok = token or profile.token
 
         # ── Collect commands ──────────────────────────────────────────────
-        commands_to_run: list[str] = _collect_commands(command, script)
+        commands_to_run: list[str] = _collect_commands(command, script, script_raw)
 
         # Apply sudo prefix
         if sudo:
@@ -66,11 +67,27 @@ def register(app: typer.Typer) -> None:
 def _collect_commands(
     command: list[str] | None,
     script: str | None,
+    script_raw: str | None = None,
 ) -> list[str]:
     """Parse command input from arguments, script file, or stdin."""
     commands: list[str] = []
 
-    if script:
+    if script_raw:
+        script_path = Path(script_raw)
+        if not script_path.is_file():
+            typer.echo(f"Script file not found: {script_path}", err=True)
+            raise typer.Exit(code=1)
+        content = script_path.read_text(encoding="utf-8")
+        if not content.strip():
+            typer.echo("Script file is empty.", err=True)
+            raise typer.Exit(code=1)
+        # Send the whole file as a single bash -c invocation
+        # Use base64 to avoid quoting issues with special characters
+        import base64
+        encoded = base64.b64encode(content.encode()).decode()
+        commands.append(f"echo {encoded} | base64 -d | bash")
+
+    elif script:
         script_path = Path(script)
         if not script_path.is_file():
             typer.echo(f"Script file not found: {script_path}", err=True)
