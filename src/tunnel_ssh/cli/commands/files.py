@@ -9,6 +9,7 @@ from typing import Annotated
 import httpx
 import typer
 
+from tunnel_ssh.cli.completions import complete_remote_path
 from tunnel_ssh.cli.http_client import api_url, handle_connect_error, handle_http_error
 from tunnel_ssh.shared.config import ServerProfile, resolve_server
 from tunnel_ssh.shared.http import auth_headers
@@ -31,7 +32,7 @@ def register(app: typer.Typer) -> None:
 
     @app.command(name="ls")
     def ls(
-        path: Annotated[str, typer.Argument(help="Remote directory path.")] = "/",
+        path: Annotated[str, typer.Argument(help="Remote directory path.", autocompletion=complete_remote_path)] = "/",
         server: Annotated[str | None, typer.Option("--server", "-s", help="Server name or hostname/IP. Uses current context if omitted.")] = None,
         port: Annotated[int | None, typer.Option("--port", "-p")] = None,
         token: Annotated[str | None, typer.Option("--token", "-t")] = None,
@@ -67,7 +68,7 @@ def register(app: typer.Typer) -> None:
 
     @app.command(name="get")
     def get(
-        remote_path: Annotated[str, typer.Argument(help="Remote file path to download.")],
+        remote_path: Annotated[str, typer.Argument(help="Remote file path to download.", autocompletion=complete_remote_path)],
         local_path: Annotated[str | None, typer.Argument(help="Local destination (default: current dir).")] = None,
         server: Annotated[str | None, typer.Option("--server", "-s", help="Server name or hostname/IP. Uses current context if omitted.")] = None,
         port: Annotated[int | None, typer.Option("--port", "-p")] = None,
@@ -107,7 +108,7 @@ def register(app: typer.Typer) -> None:
     @app.command(name="put")
     def put(
         local_path: Annotated[str, typer.Argument(help="Local file to upload.")],
-        remote_dir: Annotated[str, typer.Argument(help="Remote directory to upload into.")],
+        remote_dir: Annotated[str, typer.Argument(help="Remote directory to upload into.", autocompletion=complete_remote_path)],
         server: Annotated[str | None, typer.Option("--server", "-s", help="Server name or hostname/IP. Uses current context if omitted.")] = None,
         port: Annotated[int | None, typer.Option("--port", "-p")] = None,
         token: Annotated[str | None, typer.Option("--token", "-t")] = None,
@@ -145,7 +146,7 @@ def register(app: typer.Typer) -> None:
 
     @app.command(name="rm")
     def rm(
-        remote_path: Annotated[str, typer.Argument(help="Remote file or directory to delete.")],
+        remote_path: Annotated[str, typer.Argument(help="Remote file or directory to delete.", autocompletion=complete_remote_path)],
         server: Annotated[str | None, typer.Option("--server", "-s", help="Server name or hostname/IP. Uses current context if omitted.")] = None,
         port: Annotated[int | None, typer.Option("--port", "-p")] = None,
         token: Annotated[str | None, typer.Option("--token", "-t")] = None,
@@ -175,7 +176,7 @@ def register(app: typer.Typer) -> None:
 
     @app.command(name="mv")
     def mv(
-        remote_path: Annotated[str, typer.Argument(help="Remote file or directory to rename.")],
+        remote_path: Annotated[str, typer.Argument(help="Remote file or directory to rename.", autocompletion=complete_remote_path)],
         new_name: Annotated[str, typer.Argument(help="New name (filename only, not a path).")],
         server: Annotated[str | None, typer.Option("--server", "-s", help="Server name or hostname/IP. Uses current context if omitted.")] = None,
         port: Annotated[int | None, typer.Option("--port", "-p")] = None,
@@ -206,7 +207,7 @@ def register(app: typer.Typer) -> None:
 
     @app.command(name="cat")
     def cat(
-        remote_path: Annotated[str, typer.Argument(help="Remote file to preview.")],
+        remote_path: Annotated[str, typer.Argument(help="Remote file to preview.", autocompletion=complete_remote_path)],
         server: Annotated[str | None, typer.Option("--server", "-s", help="Server name or hostname/IP. Uses current context if omitted.")] = None,
         port: Annotated[int | None, typer.Option("--port", "-p")] = None,
         token: Annotated[str | None, typer.Option("--token", "-t")] = None,
