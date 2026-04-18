@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 from typing import Annotated
@@ -23,6 +24,15 @@ def _resolve_or_exit(server: str | None) -> ServerProfile:
     except ValueError as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(code=1)
+
+
+# MSYS2 / Git-for-Windows path mangling prefix (e.g. "C:/Program Files/Git")
+_MSYS_PREFIX_RE = re.compile(r"^[A-Za-z]:/Program Files/Git(?=/)")
+
+
+def _sanitize_path(path: str) -> str:
+    """Strip the MSYS/Git-Bash path prefix that gets prepended to ``/``-prefixed args."""
+    return _MSYS_PREFIX_RE.sub("", path)
 
 
 def register(app: typer.Typer) -> None:
@@ -48,6 +58,8 @@ def register(app: typer.Typer) -> None:
 
         if path is None:
             path = fetch_session_cwd(host, p, tok) or "/"
+        else:
+            path = _sanitize_path(path)
 
         url = api_url(host, p, "/files")
         try:
@@ -90,10 +102,13 @@ def register(app: typer.Typer) -> None:
         profile = _resolve_or_exit(server)
         host, p, tok = profile.host, port or profile.port, token or profile.token
 
+        remote_path = _sanitize_path(remote_path)
         url = api_url(host, p, "/file")
         try:
             with httpx.stream("GET", url, params={"path": remote_path}, headers=auth_headers(tok), timeout=30) as resp:
-                resp.raise_for_status()
+                if resp.status_code >= 400:
+                    resp.read()
+                    resp.raise_for_status()
 
                 if local_path:
                     dest = Path(local_path)
@@ -139,6 +154,8 @@ def register(app: typer.Typer) -> None:
 
         if remote_dir is None:
             remote_dir = fetch_session_cwd(host, p, tok) or "/"
+        else:
+            remote_dir = _sanitize_path(remote_dir)
 
         src = Path(local_path)
         if not src.is_file():
@@ -178,6 +195,7 @@ def register(app: typer.Typer) -> None:
         """Delete a file or directory on the remote server."""
         profile = _resolve_or_exit(server)
         host, p, tok = profile.host, port or profile.port, token or profile.token
+        remote_path = _sanitize_path(remote_path)
 
         if not force:
             confirm = typer.confirm(f"Delete '{remote_path}' on {host}:{p}?")
@@ -208,6 +226,7 @@ def register(app: typer.Typer) -> None:
         """Rename a file or directory on the remote server."""
         profile = _resolve_or_exit(server)
         host, p, tok = profile.host, port or profile.port, token or profile.token
+        remote_path = _sanitize_path(remote_path)
 
         url = api_url(host, p, "/file")
         try:
@@ -239,6 +258,7 @@ def register(app: typer.Typer) -> None:
         """Preview the text content of a remote file."""
         profile = _resolve_or_exit(server)
         host, p, tok = profile.host, port or profile.port, token or profile.token
+        remote_path = _sanitize_path(remote_path)
 
         url = api_url(host, p, "/file/preview")
         try:
