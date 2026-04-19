@@ -144,13 +144,19 @@ async def ws_execute(ws: WebSocket, token: str | None = Query(default=None)) -> 
                 command = _inject_sudo_s(command)
                 logger.debug("Sudo detected — rewritten command: %s", command)
 
-            # ── Handle `cd` specially — update user session cwd ─────────
-            # Only match *pure* cd commands — not compound ones like
-            # "cd /foo && git pull" which must run as a shell command.
-            cd_match = re.match(r"^\s*cd(?:\s+([^;&|]*?))?\s*$", command)
-            if cd_match and payload.user_id:
+            # ── Handle `cd` — update user session cwd ────────────────
+            # Regex for a *pure* cd: "cd /foo"
+            # Regex for a *compound* cd: "cd /foo && cmd" or "cd /foo; cmd"
+            _CD_PURE_RE = r"^\s*cd(?:\s+([^;&|]*?))?\s*$"
+            _CD_COMPOUND_RE = r"^\s*cd\s+([^;&|]+?)\s*(?:&&|;)\s*(.+)$"
+
+            cd_pure = re.match(_CD_PURE_RE, command)
+            cd_compound = re.match(_CD_COMPOUND_RE, command) if not cd_pure else None
+
+            if cd_pure and payload.user_id:
+                # Pure cd — just update session cwd, no subprocess needed.
                 target = _resolve_cd_target(
-                    cd_match.group(1) or "", effective_cwd,
+                    cd_pure.group(1) or "", effective_cwd,
                 )
                 if not os.path.isdir(target):
                     await ws.send_text(
@@ -168,6 +174,18 @@ async def ws_execute(ws: WebSocket, token: str | None = Query(default=None)) -> 
                     CommandOutput(stream="exit", data="0").model_dump_json()
                 )
                 continue
+
+            if cd_compound and payload.user_id:
+                # Compound cd — update session cwd AND execute the full
+                # command in the shell (the shell handles the actual cd).
+                target = _resolve_cd_target(
+                    cd_compound.group(1), effective_cwd,
+                )
+                if os.path.isdir(target):
+                    _set_user_cwd(payload.user_id, target)
+                    effective_cwd = target
+                # Let the command fall through to subprocess execution so
+                # the shell runs "cd /foo && git pull" as a unit.
 
             # ── Validate effective_cwd before starting a subprocess ───────
             if effective_cwd and not os.path.isdir(effective_cwd):
