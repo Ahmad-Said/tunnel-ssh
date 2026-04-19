@@ -48,6 +48,39 @@ def _set_user_cwd(user_id: str | None, cwd: str) -> None:
         _user_sessions.setdefault(user_id, {})["cwd"] = cwd
 
 
+def _resolve_existing_parent(path: str) -> str:
+    """Walk up the directory tree and return the nearest existing ancestor.
+
+    If *path* itself exists, it is returned unchanged.  Otherwise each parent
+    directory is tried until an existing one is found.  As a last resort ``/``
+    is returned.
+    """
+    candidate = os.path.abspath(path)
+    while candidate and candidate != os.path.dirname(candidate):
+        if os.path.isdir(candidate):
+            return candidate
+        candidate = os.path.dirname(candidate)
+    return candidate or "/"
+
+
+def _resolve_cd_target(raw_target: str, effective_cwd: str | None) -> str:
+    """Expand ``~``, resolve relative paths against *effective_cwd*, and normalise."""
+    target = raw_target.strip().strip("'\"")
+
+    # Handle home-directory shortcuts
+    if target in ("", "~"):
+        return os.path.expanduser("~")
+    if target.startswith("~/"):
+        target = os.path.expanduser(target)
+        return os.path.normpath(target)
+
+    # Relative paths resolve against the current effective cwd
+    if not os.path.isabs(target) and effective_cwd:
+        target = os.path.join(effective_cwd, target)
+
+    return os.path.normpath(target)
+
+
 @router.get("/session/cwd", dependencies=[Depends(verify_token)])
 async def get_session_cwd(user_id: str = Query(..., description="Client user ID")) -> dict[str, str | None]:
     """Return the last known working directory for *user_id*."""
@@ -112,17 +145,45 @@ async def ws_execute(ws: WebSocket, token: str | None = Query(default=None)) -> 
                 logger.debug("Sudo detected — rewritten command: %s", command)
 
             # ── Handle `cd` specially — update user session cwd ─────────
-            cd_match = re.match(r"^\s*cd\s+(.*)", command)
+            # Only match *pure* cd commands — not compound ones like
+            # "cd /foo && git pull" which must run as a shell command.
+            cd_match = re.match(r"^\s*cd(?:\s+([^;&|]*?))?\s*$", command)
             if cd_match and payload.user_id:
-                target = cd_match.group(1).strip().strip("'\"")
-                # Resolve relative to current effective cwd
-                if effective_cwd:
-                    target = os.path.normpath(os.path.join(effective_cwd, target)) if not os.path.isabs(target) else target
+                target = _resolve_cd_target(
+                    cd_match.group(1) or "", effective_cwd,
+                )
+                if not os.path.isdir(target):
+                    await ws.send_text(
+                        CommandOutput(
+                            stream="stderr",
+                            data=f"cd: no such file or directory: {target}\n",
+                        ).model_dump_json()
+                    )
+                    await ws.send_text(
+                        CommandOutput(stream="exit", data="1").model_dump_json()
+                    )
+                    continue
                 _set_user_cwd(payload.user_id, target)
                 await ws.send_text(
                     CommandOutput(stream="exit", data="0").model_dump_json()
                 )
                 continue
+
+            # ── Validate effective_cwd before starting a subprocess ───────
+            if effective_cwd and not os.path.isdir(effective_cwd):
+                original_cwd = effective_cwd
+                effective_cwd = _resolve_existing_parent(effective_cwd)
+                # Persist the corrected cwd so future commands don't repeat the fallback
+                _set_user_cwd(payload.user_id, effective_cwd)
+                await ws.send_text(
+                    CommandOutput(
+                        stream="warning",
+                        data=(
+                            f"⚠ Working directory '{original_cwd}' no longer exists. "
+                            f"Falling back to '{effective_cwd}'.\n"
+                        ),
+                    ).model_dump_json()
+                )
 
             try:
                 proc = await asyncio.create_subprocess_shell(

@@ -57,9 +57,10 @@ class CommandOutput(BaseModel):
     * ``"stderr"``  — a chunk of standard error
     * ``"exit"``    — the process has exited; ``data`` contains the return code
     * ``"prompt"``  — the process requires interactive input (e.g. sudo password)
+    * ``"warning"`` — a non-fatal warning (e.g. cwd fallback)
     """
 
-    stream: Literal["stdout", "stderr", "exit", "prompt"]
+    stream: Literal["stdout", "stderr", "exit", "prompt", "warning"]
     data: str
 
 

@@ -89,6 +89,9 @@ async def execute_remote(
                 elif msg.stream == "stderr":
                     sys.stderr.write(msg.data)
                     sys.stderr.flush()
+                elif msg.stream == "warning":
+                    sys.stderr.write(msg.data)
+                    sys.stderr.flush()
                 elif msg.stream == "prompt":
                     # Server is requesting interactive input (e.g. sudo password).
                     password = getpass.getpass(msg.data)
